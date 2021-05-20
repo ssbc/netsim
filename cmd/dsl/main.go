@@ -1,8 +1,8 @@
 package main
 
 import (
-	// "os"
 	"fmt"
+	"os"
 	// "log"
 	"bytes"
 	"encoding/json"
@@ -49,34 +49,35 @@ func (t TestError) Error() string {
 }
 
 func (instr Instruction) Print() {
-	fmt.Printf("# %d %s\n", instr.id, instr.line)
+	taplog(fmt.Sprintf("%d %s", instr.id, instr.line))
 }
 
 func (instr Instruction) TestSuccess() {
-	fmt.Printf("ok %d %s\n", instr.id, instr.line)
+	fmt.Printf("ok %d - %s\n", instr.id, instr.line)
 }
 
 func (instr Instruction) TestFailure(err error) {
-	fmt.Printf("not ok %d %s\n", instr.id, instr.line)
-	fmt.Printf("# %s\n", err.Error())
+	fmt.Printf("not ok %d - %s\n", instr.id, instr.line)
+	taplog(err.Error())
 }
 
 func (instr Instruction) getSrc() string {
 	return instr.args[0]
 }
 
-func (instr Instruction) getFirst() string {
-	return instr.args[0]
-}
-
-func (instr Instruction) getSecond() string {
+func (instr Instruction) getDst() string {
 	if len(instr.args) > 1 {
 		return instr.args[1]
 	}
 	return ""
 }
 
-func (instr Instruction) getDst() string {
+// aliases of getSrc/getDst for args that don't correlate to src & dst :)
+func (instr Instruction) getFirst() string {
+	return instr.args[0]
+}
+
+func (instr Instruction) getSecond() string {
 	if len(instr.args) > 1 {
 		return instr.args[1]
 	}
@@ -89,14 +90,18 @@ const (
 )
 
 func startPuppet(id int) error {
-	cmd := exec.Command(PUPPETSCRIPT, strconv.Itoa(id))
-	var stderr bytes.Buffer
-	var out bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Stdout = &out
-	err := cmd.Run()
+	filename := fmt.Sprintf("./log-%d.txt", id)
+	outfile, err := os.Create(filename)
 	if err != nil {
-		return TestError{err: err, message: stderr.String()}
+		return TestError{err: err, message: "could not create log file"}
+	}
+	defer outfile.Close()
+	cmd := exec.Command(PUPPETSCRIPT, strconv.Itoa(id))
+	cmd.Stderr = outfile
+	cmd.Stdout = outfile
+	err = cmd.Run()
+	if err != nil {
+		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information")}
 	}
 	return nil
 }
@@ -106,7 +111,7 @@ func run(line string) (bytes.Buffer, error) {
 	cmd := exec.Command(parts[0], parts[1:]...)
 	var stderr bytes.Buffer
 	var out bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = &out
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
@@ -129,7 +134,20 @@ func query(id int, q string) (bytes.Buffer, error) {
 }
 
 func taplog(str string) {
-	fmt.Printf("# %s\n", str)
+	for _, line := range strings.Split(str, "\n") {
+		fmt.Printf("# %s\n", line)
+	}
+}
+
+func trimFeedId(feedID string) string {
+	s := strings.ReplaceAll(feedID, "@", "")
+	return strings.ReplaceAll(s, ".ed25519", "")
+}
+
+func multiserverAddr(feedID string, port int) string {
+	// format: net:192.168.88.18:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
+	ip := "192.168.88.18"
+	return fmt.Sprintf("net:%s:%d~shs:%s", ip, port, trimFeedId(feedID))
 }
 
 func execute(instructions []Instruction) {
@@ -146,10 +164,20 @@ func execute(instructions []Instruction) {
 				instr.TestFailure(err)
 				continue
 			}
-			taplog(fmt.Sprintf("%s has id %s", name, feedID))
 			puppetMap[name] = Puppet{name: name, feedID: feedID, instanceID: portCounter}
 			portCounter += 1
 			instr.TestSuccess()
+			taplog(fmt.Sprintf("%s has id %s", name, feedID))
+		case "log":
+			src := instr.getSrc()
+			srcPuppet := puppetMap[src]
+			msg, err := DoLog(srcPuppet.instanceID)
+			if err != nil {
+				instr.TestFailure(err)
+				continue
+			}
+			instr.TestSuccess()
+			taplog(msg)
 		case "wait":
 			ms, err := time.ParseDuration(fmt.Sprintf("%sms", instr.getFirst()))
 			if err != nil {
@@ -191,6 +219,19 @@ func execute(instructions []Instruction) {
 				continue
 			}
 			instr.TestSuccess()
+		case "disconnect":
+			fallthrough
+		case "connect":
+			src := instr.getSrc()
+			srcPuppet := puppetMap[src]
+			dst := instr.getDst()
+			dstPuppet := puppetMap[dst]
+			err := DoConnect(srcPuppet, dstPuppet, instr.command == "connect")
+			if err != nil {
+				instr.TestFailure(err)
+				continue
+			}
+			instr.TestSuccess()
 		case "has":
 			src := instr.getSrc()
 			arg := strings.Split(instr.getSecond(), "@")
@@ -207,6 +248,7 @@ func execute(instructions []Instruction) {
 			instr.Print()
 		}
 	}
+	fmt.Printf("1..%d\n", len(instructions))
 }
 
 func getLatestByFeedID(seqnos []Latest, feedID string) Latest {
@@ -233,6 +275,24 @@ func queryLatest(src Puppet) ([]Latest, error) {
 	return seqnos, nil
 }
 
+func DoConnect(src, dst Puppet, isConnect bool) error {
+	portSrc := 18888 + src.instanceID
+	portDst := 18888 + dst.instanceID
+	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
+	connectType := "connect"
+	if !isConnect {
+		connectType = "disconnect"
+	}
+	CLI := "/home/cblgh/code/go/src/ssb/cmd/sbotcli/sbotcli"
+	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret call conn.%s %s`, CLI, portSrc, src.instanceID, connectType, dstMultiAddr)
+	response, err := run(cmd)
+	if err != nil {
+		return err
+	}
+	taplog(response.String())
+	return nil
+}
+
 // really bad Rammstein pun, sorry absolutely not sorry
 func DoHast(src, dst Puppet, seqno string) error {
 	srcLatestSeqs, err := queryLatest(src)
@@ -243,11 +303,13 @@ func DoHast(src, dst Puppet, seqno string) error {
 	if err != nil {
 		return err
 	}
-	dstBySrc := getLatestByFeedID(srcLatestSeqs, dst.feedID)
-	dstByDst := getLatestByFeedID(dstLatestSeqs, dst.feedID)
+
+	dstViaSrc := getLatestByFeedID(srcLatestSeqs, dst.feedID)
+	dstViaDst := getLatestByFeedID(dstLatestSeqs, dst.feedID)
+
 	var assertedSeqno int
 	if seqno == "latest" {
-		assertedSeqno = dstByDst.Sequence
+		assertedSeqno = dstViaDst.Sequence
 	} else {
 		assertedSeqno, err = strconv.Atoi(seqno)
 		if err != nil {
@@ -256,10 +318,10 @@ func DoHast(src, dst Puppet, seqno string) error {
 		}
 	}
 
-	if dstBySrc.Sequence == assertedSeqno && dstBySrc.ID == dstByDst.ID {
+	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dstViaDst.ID {
 		return nil
 	} else {
-		m := fmt.Sprintf("expected sequence: %s at seq %d\nwas sequence %s at seq %d", dstByDst.ID, assertedSeqno, dstBySrc.ID, dstBySrc.Sequence)
+		m := fmt.Sprintf("expected sequence: %s at seq %d\nwas sequence %s at seq %d", dstViaDst.ID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
 		return TestError{err: errors.New("sequences didn't match"), message: m}
 	}
 	return nil
@@ -275,12 +337,20 @@ func DoWhoami(instance int) (string, error) {
 	return parsed.ID, nil
 }
 
+func DoLog(instance int) (string, error) {
+	response, err := query(instance, "log")
+	if err != nil {
+		return "", err
+	}
+	return response.String(), nil
+}
+
 func DoFollow(instance int, feedID string, isFollow bool) error {
 	var followType string
 	if !isFollow { // => unfollow message
 		followType = "no-"
 	}
-	followMsg := fmt.Sprintf(`publish --type contact --contact '%s' --%sfollowing`, feedID, followType)
+	followMsg := fmt.Sprintf(`publish --type contact --contact %s --%sfollowing`, feedID, followType)
 	_, err := query(instance, followMsg)
 	if err != nil {
 		return err
@@ -305,7 +375,7 @@ func DoIsFollowing(instance int, srcID, dstID string) error {
 func DoPost(instance int) error {
 	port := 18888 + instance
 	CLI := "/home/cblgh/code/go/src/ssb/cmd/sbotcli/sbotcli"
-	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key ~/code/netsim-experiments/ssb-server/puppet_%s/secret --unixsock '' publish post bep`, CLI, port, instance)
+	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret publish post bep`, CLI, port, instance)
 	_, err := run(cmd)
 	if err != nil {
 		return err
@@ -332,13 +402,18 @@ start bob
 wait 1000
 follow alice, bob
 follow bob, alice
+wait 3000
+connect bob, alice
+wait 1000
 post alice
 post alice
-wait 700
+wait 500
+has bob, alice@latest
+disconnect bob, alice
+wait 3000
 post alice
 post alice
 has bob, alice@latest
-has bob, alice@10
 wait 100`
 
 func main() {
