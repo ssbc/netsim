@@ -1,18 +1,20 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"bytes"
-	"strings"
-	"time"
+	"fmt"
+	"log"
+	"os"
 	"os/exec"
 	"strconv"
-	"log"
+	"strings"
+	"time"
+
+	refs "go.mindeco.de/ssb-refs"
 )
 
 type Whoami struct {
-	ID string
+	ID refs.FeedRef
 }
 
 type Latest struct {
@@ -38,10 +40,10 @@ func (t TestError) Error() string {
 }
 
 type Simulator struct {
-  puppetMap map[string]Puppet
-  portCounter int
-  instr Instruction
-  instructions []Instruction
+	puppetMap    map[string]Puppet
+	portCounter  int
+	instr        Instruction
+	instructions []Instruction
 }
 
 const (
@@ -82,8 +84,8 @@ func runline(line string) (bytes.Buffer, error) {
 }
 
 func queryMuxrpc(id int, q string) (bytes.Buffer, error) {
-  // runs intermediary script that formats & outputs the actual muxrpc to run
-  // see query.sh
+	// runs intermediary script that formats & outputs the actual muxrpc to run
+	// see query.sh
 	cmd := exec.Command(QUERYSCRIPT, strconv.Itoa(id), q)
 	var out bytes.Buffer
 	var queryLine bytes.Buffer
@@ -96,24 +98,24 @@ func queryMuxrpc(id int, q string) (bytes.Buffer, error) {
 	return runline(queryLine.String())
 }
 
-func makeSimulator () Simulator {
+func makeSimulator() Simulator {
 	puppetMap := make(map[string]Puppet)
-  return Simulator{puppetMap: puppetMap}
+	return Simulator{puppetMap: puppetMap}
 }
 
-func (s Simulator) getSrcPuppet () Puppet {
-  return s.puppetMap[s.instr.getSrc()]
+func (s Simulator) getSrcPuppet() Puppet {
+	return s.puppetMap[s.instr.getSrc()]
 }
 
-func (s Simulator) getDstPuppet () Puppet {
-  return s.puppetMap[s.instr.getDst()]
+func (s Simulator) getDstPuppet() Puppet {
+	return s.puppetMap[s.instr.getDst()]
 }
 
-func (s *Simulator) incrementPort () {
-  s.portCounter += 1
+func (s *Simulator) incrementPort() {
+	s.portCounter += 1
 }
 
-func (s *Simulator) ParseTest (lines []string) {
+func (s *Simulator) ParseTest(lines []string) {
 	s.instructions = make([]Instruction, 0, len(lines))
 	fmt.Println("## Start test file")
 	for i, line := range lines {
@@ -124,25 +126,25 @@ func (s *Simulator) ParseTest (lines []string) {
 	fmt.Println("## End test file")
 }
 
-func (s Simulator) evaluateRun (err error) {
-  if err != nil {
-    s.instr.TestFailure(err)
-  } else {
-    s.instr.TestSuccess()
-  }
+func (s Simulator) evaluateRun(err error) {
+	if err != nil {
+		s.instr.TestFailure(err)
+	} else {
+		s.instr.TestSuccess()
+	}
 }
 
-func (s *Simulator) updateCurrentInstruction (instr Instruction) {
-  s.instr = instr
+func (s *Simulator) updateCurrentInstruction(instr Instruction) {
+	s.instr = instr
 }
 
 func (s Simulator) execute() {
 	for _, instr := range s.instructions {
-    s.updateCurrentInstruction(instr)
+		s.updateCurrentInstruction(instr)
 		switch instr.command {
 		case "start":
 			name := instr.args[0]
-      go startPuppet(Puppet{name: name, instanceID: s.portCounter})
+			go startPuppet(Puppet{name: name, instanceID: s.portCounter})
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(s.portCounter)
 			if err != nil {
@@ -153,14 +155,15 @@ func (s Simulator) execute() {
 			s.incrementPort()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
+			taplog(fmt.Sprintf("logging to log-%s.txt", name))
 		case "log":
-      srcPuppet := s.getSrcPuppet()
-      amount, err := strconv.Atoi(instr.getSecond())
-      if err != nil {
-        log.Fatalln(err)
-      }
+			srcPuppet := s.getSrcPuppet()
+			amount, err := strconv.Atoi(instr.getSecond())
+			if err != nil {
+				log.Fatalln(err)
+			}
 			msg, err := DoLog(srcPuppet.instanceID, amount)
-      s.evaluateRun(err)
+			s.evaluateRun(err)
 			taplog(msg)
 		case "wait":
 			ms, err := time.ParseDuration(fmt.Sprintf("%sms", instr.getFirst()))
@@ -173,41 +176,41 @@ func (s Simulator) execute() {
 		case "unfollow":
 			fallthrough
 		case "follow":
-      srcPuppet := s.getSrcPuppet()
-      dstPuppet := s.getDstPuppet()
-			err := DoFollow(srcPuppet.instanceID, dstPuppet.feedID, instr.command == "follow")
-      s.evaluateRun(err)
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getDstPuppet()
+			err := DoFollowWithGoClient(srcPuppet.instanceID, dstPuppet.feedID, instr.command == "follow")
+			s.evaluateRun(err)
 		case "isfollowing":
-      srcPuppet := s.getSrcPuppet()
-      dstPuppet := s.getDstPuppet()
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getDstPuppet()
 			err := DoIsFollowing(srcPuppet.instanceID, srcPuppet.feedID, dstPuppet.feedID)
-      s.evaluateRun(err)
+			s.evaluateRun(err)
 		case "isnotfollowing":
-      srcPuppet := s.getSrcPuppet()
-      dstPuppet := s.getDstPuppet()
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getDstPuppet()
 			err := DoIsNotFollowing(srcPuppet.instanceID, srcPuppet.feedID, dstPuppet.feedID)
-      s.evaluateRun(err)
+			s.evaluateRun(err)
 		case "post":
-      srcPuppet := s.getSrcPuppet()
-			err := DoPost(srcPuppet.instanceID)
-      s.evaluateRun(err)
+			srcPuppet := s.getSrcPuppet()
+			err := DoPostWithGoClient(srcPuppet.instanceID)
+			s.evaluateRun(err)
 		case "disconnect":
-      srcPuppet := s.getSrcPuppet()
-      dstPuppet := s.getDstPuppet()
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getDstPuppet()
 			err := DoDisconnect(srcPuppet, dstPuppet)
-      s.evaluateRun(err)
+			s.evaluateRun(err)
 		case "connect":
-      srcPuppet := s.getSrcPuppet()
-      dstPuppet := s.getDstPuppet()
-			err := DoConnect(srcPuppet, dstPuppet)
-      s.evaluateRun(err)
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getDstPuppet()
+			err := DoConnectWithGoClient(srcPuppet, dstPuppet)
+			s.evaluateRun(err)
 		case "has":
 			arg := strings.Split(instr.getSecond(), "@")
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.puppetMap[dst]
 			err := DoHast(srcPuppet, dstPuppet, seq)
-      s.evaluateRun(err)
+			s.evaluateRun(err)
 		default:
 			instr.Print()
 		}
@@ -216,8 +219,8 @@ func (s Simulator) execute() {
 }
 
 func main() {
-  sim := makeSimulator()
+	sim := makeSimulator()
 	lines := readTest("test.txt")
-  sim.ParseTest(lines)
+	sim.ParseTest(lines)
 	sim.execute()
 }

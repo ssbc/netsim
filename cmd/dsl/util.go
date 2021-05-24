@@ -1,10 +1,10 @@
 package main
 
 import (
-  "fmt"
-  "io/ioutil"
-  "strings"
-  "log"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"strings"
 )
 
 func trimFeedId(feedID string) string {
@@ -44,10 +44,9 @@ func parseTestLine(line string, id int) Instruction {
 }
 
 func readTest(filename string) []string {
-  testfile, err := ioutil.ReadFile(filename)
-  if err != nil {
-    log.Fatalln(err)
-  }
-  return strings.Split(strings.TrimSpace(string(testfile)), "\n")
+	testfile, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return strings.Split(strings.TrimSpace(string(testfile)), "\n")
 }
-

@@ -1,7 +1,7 @@
 package main
 
 import (
-  "fmt"
+	"fmt"
 )
 
 type Instruction struct {
