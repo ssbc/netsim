@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -48,7 +47,6 @@ type Simulator struct {
 
 const (
 	PUPPETSCRIPT = "/home/cblgh/code/netsim-experiments/ssb-server/start-nodejs-puppet.sh"
-	QUERYSCRIPT  = "/home/cblgh/code/netsim-experiments/ssb-server/query.sh"
 )
 
 func startPuppet(p Puppet) error {
@@ -66,36 +64,6 @@ func startPuppet(p Puppet) error {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information")}
 	}
 	return nil
-}
-
-// TODO: replace runline && queryMuxrpc by using sbotcli as a module
-func runline(line string) (bytes.Buffer, error) {
-	parts := strings.Fields(line)
-	cmd := exec.Command(parts[0], parts[1:]...)
-	var stderr bytes.Buffer
-	var out bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
-		return bytes.Buffer{}, TestError{err: err, message: stderr.String()}
-	}
-	return out, nil
-}
-
-func queryMuxrpc(id int, q string) (bytes.Buffer, error) {
-	// runs intermediary script that formats & outputs the actual muxrpc to run
-	// see query.sh
-	cmd := exec.Command(QUERYSCRIPT, strconv.Itoa(id), q)
-	var out bytes.Buffer
-	var queryLine bytes.Buffer
-	cmd.Stderr = &out
-	cmd.Stdout = &queryLine
-	err := cmd.Run()
-	if err != nil {
-		return bytes.Buffer{}, TestError{err: err, message: out.String()}
-	}
-	return runline(queryLine.String())
 }
 
 func makeSimulator() Simulator {
