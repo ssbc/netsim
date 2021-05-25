@@ -12,10 +12,10 @@ func trimFeedId(feedID string) string {
 	return strings.ReplaceAll(s, ".ed25519", "")
 }
 
-func multiserverAddr(feedID string, port int) string {
+func multiserverAddr(p Puppet) string {
 	// format: net:192.168.88.18:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
 	ip := "192.168.88.18"
-	return fmt.Sprintf("net:%s:%d~shs:%s", ip, port, trimFeedId(feedID))
+	return fmt.Sprintf("net:%s:%d~shs:%s", ip, p.Port, trimFeedId(p.feedID))
 }
 
 func taplog(str string) {
@@ -31,11 +31,6 @@ func getLatestByFeedID(seqnos []Latest, feedID string) Latest {
 		}
 	}
 	return Latest{}
-}
-
-// Splits a string of json items into a slice of strings, each containing a json item
-func splitResponses(response string) []string {
-	return strings.Split(strings.TrimSpace(response), "\n\n")
 }
 
 func parseTestLine(line string, id int) Instruction {

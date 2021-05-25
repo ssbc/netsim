@@ -15,11 +15,10 @@ import (
 	"github.com/ssb-ngi-pointer/netsim/client"
 )
 
-func asyncRequest(instance int, method muxrpc.Method, payload, response interface{}) error {
-	port := 18888 + instance
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
+func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{}) error {
+	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, p.instanceID)
 
-	c, err := client.NewTCP(port, secretFile)
+	c, err := client.NewTCP(p.Port, secretFile)
 	if err != nil {
 		return err
 	}
@@ -34,10 +33,10 @@ func asyncRequest(instance int, method muxrpc.Method, payload, response interfac
 	return nil
 }
 
-func sourceRequest(instance int, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
+func sourceRequest(p Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
+	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, p.instanceID)
 
-	c, err := client.NewTCP(18888+instance, secretFile)
+	c, err := client.NewTCP(p.Port, secretFile)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -48,24 +47,23 @@ func sourceRequest(instance int, method muxrpc.Method, opts interface{}) (muxrpc
 }
 
 func DoConnect(src, dst Puppet) error {
-	portDst := 18888 + dst.instanceID
-	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
+	dstMultiAddr := multiserverAddr(dst)
 
 	var response interface{}
-	return asyncRequest(src.instanceID, muxrpc.Method{"conn", "connect"}, dstMultiAddr, &response)
+	return asyncRequest(src, muxrpc.Method{"conn", "connect"}, dstMultiAddr, &response)
 }
 
 func DoDisconnect(src, dst Puppet) error {
-	portDst := 18888 + dst.instanceID
-	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
+	dstMultiAddr := multiserverAddr(dst)
 
 	var response interface{}
-	return asyncRequest(src.instanceID, muxrpc.Method{"conn", "disconnect"}, dstMultiAddr, &response)
+	return asyncRequest(src, muxrpc.Method{"conn", "disconnect"}, dstMultiAddr, &response)
 }
 
+// TODO: use createLogStream opts here, as we use them in DoLog?
 func queryLatest(p Puppet) ([]Latest, error) {
 	var empty interface{}
-	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"latest"}, empty)
+	c, src, err := sourceRequest(p, muxrpc.Method{"latest"}, empty)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +126,7 @@ func DoHast(src, dst Puppet, seqno string) error {
 func DoWhoami(p Puppet) (string, error) {
 	var parsed Whoami
 	var empty interface{}
-	err := asyncRequest(p.instanceID, muxrpc.Method{"whoami"}, &empty, &parsed)
+	err := asyncRequest(p, muxrpc.Method{"whoami"}, &empty, &parsed)
 	if err != nil {
 		return "", err
 	}
@@ -143,7 +141,7 @@ func DoLog(p Puppet, n int) (string, error) {
 
 	// only get the last n logs
 	opts := sourceOptions{Limit: n, Reverse: true}
-	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"createLogStream"}, opts)
+	c, src, err := sourceRequest(p, muxrpc.Method{"createLogStream"}, opts)
 	if err != nil {
 		return "", err
 	}
@@ -192,7 +190,7 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 	followContent.Following = isFollow
 
 	var response interface{}
-	err = asyncRequest(srcPuppet.instanceID, muxrpc.Method{"publish"}, followContent, &response)
+	err = asyncRequest(srcPuppet, muxrpc.Method{"publish"}, followContent, &response)
 	return err
 }
 
@@ -200,7 +198,7 @@ func DoPost(p Puppet) error {
 	post := refs.NewPost("bep")
 
 	var response interface{}
-	return asyncRequest(p.instanceID, muxrpc.Method{"publish"}, post, &response)
+	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 
 func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
@@ -219,7 +217,7 @@ func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
 	}{Source: srcRef, Dest: dstRef}
 
 	var response interface{}
-	err = asyncRequest(srcPuppet.instanceID, muxrpc.Method{"friends", "isFollowing"}, arg, &response)
+	err = asyncRequest(srcPuppet, muxrpc.Method{"friends", "isFollowing"}, arg, &response)
 	if err != nil {
 		return false, err
 	}

@@ -20,13 +20,13 @@ func NewTCP(port int, secretPath string) (muxrpc.Endpoint, error) {
 	}
 
 	// default app key for the secret-handshake connection
-	ak, err := base64.StdEncoding.DecodeString(defaultShsCap)
+	appkey, err := base64.StdEncoding.DecodeString(defaultShsCap)
 	if err != nil {
 		return nil, err
 	}
 
 	// create a shs client to authenticate and encrypt the connection
-	clientSHS, err := secretstream.NewClient(kp.Pair, ak)
+	clientSHS, err := secretstream.NewClient(kp.Pair, appkey)
 	if err != nil {
 		return nil, err
 	}

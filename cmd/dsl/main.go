@@ -23,6 +23,7 @@ type Latest struct {
 }
 
 type Puppet struct {
+  Port int
 	feedID     string
 	name       string
 	instanceID int
@@ -43,6 +44,7 @@ type Simulator struct {
 	portCounter  int
 	instr        Instruction
 	instructions []Instruction
+  basePort    int
 }
 
 const (
@@ -106,13 +108,17 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
+func (s *Simulator) acquirePort() int {
+  return s.basePort + s.portCounter
+}
+
 func (s Simulator) execute() {
 	for _, instr := range s.instructions {
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
 		case "start":
 			name := instr.args[0]
-			p := Puppet{name: name, instanceID: s.portCounter}
+      p := Puppet{name: name, instanceID: s.portCounter, Port: s.acquirePort()}
 			go startPuppet(p)
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
@@ -190,6 +196,7 @@ func (s Simulator) execute() {
 
 func main() {
 	sim := makeSimulator()
+  sim.basePort = 18888
 	lines := readTest("test.txt")
 	sim.ParseTest(lines)
 	sim.execute()
