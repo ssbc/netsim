@@ -124,18 +124,18 @@ func DoHast(src, dst Puppet, seqno string) error {
 	return nil
 }
 
-func DoWhoami(instance int) (string, error) {
+func DoWhoami(p Puppet) (string, error) {
 	var parsed Whoami
 	var empty interface{}
-	err := asyncRequest(instance, muxrpc.Method{"whoami"}, &empty, &parsed)
+	err := asyncRequest(p.instanceID, muxrpc.Method{"whoami"}, &empty, &parsed)
 	if err != nil {
 		return "", err
 	}
 	return parsed.ID.Ref(), nil
 }
 
-func DoLog(instance, n int) (string, error) {
-	c, src, err := sourceRequest(instance, muxrpc.Method{"createLogStream"})
+func DoLog(p Puppet, n int) (string, error) {
+	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"createLogStream"})
 	defer c.Terminate()
 	if err != nil {
 		return "", err
@@ -175,8 +175,8 @@ func DoLog(instance, n int) (string, error) {
 	return strings.Join(response[length-n:length], "\n"), nil
 }
 
-func DoFollow(instance int, feedID string, isFollow bool) error {
-	feedRef, err := refs.ParseFeedRef(feedID)
+func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
+	feedRef, err := refs.ParseFeedRef(dstPuppet.feedID)
 	if err != nil {
 		return err
 	}
@@ -185,23 +185,23 @@ func DoFollow(instance int, feedID string, isFollow bool) error {
 	followContent.Following = isFollow
 
 	var response interface{}
-	err = asyncRequest(instance, muxrpc.Method{"publish"}, followContent, &response)
+	err = asyncRequest(srcPuppet.instanceID, muxrpc.Method{"publish"}, followContent, &response)
 	return err
 }
 
-func DoPost(instance int) error {
+func DoPost(p Puppet) error {
 	post := refs.NewPost("bep")
 
 	var response interface{}
-	return asyncRequest(instance, muxrpc.Method{"publish"}, post, &response)
+	return asyncRequest(p.instanceID, muxrpc.Method{"publish"}, post, &response)
 }
 
-func queryIsFollowing(instance int, srcID, dstID string) (bool, error) {
-	srcRef, err := refs.ParseFeedRef(srcID)
+func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
+	srcRef, err := refs.ParseFeedRef(srcPuppet.feedID)
 	if err != nil {
 		return false, err
 	}
-	dstRef, err := refs.ParseFeedRef(dstID)
+	dstRef, err := refs.ParseFeedRef(dstPuppet.feedID)
 	if err != nil {
 		return false, err
 	}
@@ -212,31 +212,33 @@ func queryIsFollowing(instance int, srcID, dstID string) (bool, error) {
 	}{Source: srcRef, Dest: dstRef}
 
 	var response interface{}
-	err = asyncRequest(instance, muxrpc.Method{"friends", "isFollowing"}, arg, &response)
+	err = asyncRequest(srcPuppet.instanceID, muxrpc.Method{"friends", "isFollowing"}, arg, &response)
 	if err != nil {
 		return false, err
 	}
 	return response.(bool), nil
 }
 
-func DoIsFollowing(instance int, srcID, dstID string) error {
-	isFollowing, err := queryIsFollowing(instance, srcID, dstID)
+func DoIsFollowing(srcPuppet, dstPuppet Puppet) error {
+	isFollowing, err := queryIsFollowing(srcPuppet, dstPuppet)
 	if err != nil {
 		return err
 	}
 	if !isFollowing {
-		m := fmt.Sprintf("%s did not follow %s", srcID, dstID)
+		m := fmt.Sprintf("%s did not follow %s", srcPuppet.feedID, dstPuppet.feedID)
 		return TestError{err: errors.New("isfollowing returned false"), message: m}
 	}
 	return nil
 }
 
-func DoIsNotFollowing(instance int, srcID, dstID string) error {
-	isFollowing, err := queryIsFollowing(instance, srcID, dstID)
+func DoIsNotFollowing(srcPuppet, dstPuppet Puppet) error {
+	isFollowing, err := queryIsFollowing(srcPuppet, dstPuppet)
 	if err != nil {
 		return err
 	}
 	if isFollowing {
+    srcID := srcPuppet.feedID
+    dstID := dstPuppet.feedID
 		m := fmt.Sprintf("%s should not follow %s\nactual: %s is following %s", srcID, dstID, srcID, dstID)
 		return TestError{err: errors.New("isfollowing returned true"), message: m}
 	}

@@ -112,14 +112,16 @@ func (s Simulator) execute() {
 		switch instr.command {
 		case "start":
 			name := instr.args[0]
-			go startPuppet(Puppet{name: name, instanceID: s.portCounter})
+      p := Puppet{name: name, instanceID: s.portCounter}
+			go startPuppet(p)
 			time.Sleep(1 * time.Second)
-			feedID, err := DoWhoami(s.portCounter)
+			feedID, err := DoWhoami(p)
 			if err != nil {
 				instr.TestFailure(err)
 				continue
 			}
-			s.puppetMap[name] = Puppet{name: name, feedID: feedID, instanceID: s.portCounter}
+      p.feedID = feedID
+			s.puppetMap[name] = p
 			s.incrementPort()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
@@ -130,7 +132,7 @@ func (s Simulator) execute() {
 			if err != nil {
 				log.Fatalln(err)
 			}
-			msg, err := DoLog(srcPuppet.instanceID, amount)
+			msg, err := DoLog(srcPuppet, amount)
 			s.evaluateRun(err)
 			taplog(msg)
 		case "wait":
@@ -146,21 +148,21 @@ func (s Simulator) execute() {
 		case "follow":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
-			err := DoFollow(srcPuppet.instanceID, dstPuppet.feedID, instr.command == "follow")
+			err := DoFollow(srcPuppet, dstPuppet, instr.command == "follow")
 			s.evaluateRun(err)
 		case "isfollowing":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
-			err := DoIsFollowing(srcPuppet.instanceID, srcPuppet.feedID, dstPuppet.feedID)
+			err := DoIsFollowing(srcPuppet, dstPuppet)
 			s.evaluateRun(err)
 		case "isnotfollowing":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
-			err := DoIsNotFollowing(srcPuppet.instanceID, srcPuppet.feedID, dstPuppet.feedID)
+			err := DoIsNotFollowing(srcPuppet, dstPuppet)
 			s.evaluateRun(err)
 		case "post":
 			srcPuppet := s.getSrcPuppet()
-			err := DoPost(srcPuppet.instanceID)
+			err := DoPost(srcPuppet)
 			s.evaluateRun(err)
 		case "disconnect":
 			srcPuppet := s.getSrcPuppet()
