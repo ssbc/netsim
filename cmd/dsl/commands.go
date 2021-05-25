@@ -237,8 +237,8 @@ func DoIsNotFollowing(srcPuppet, dstPuppet Puppet) error {
 		return err
 	}
 	if isFollowing {
-    srcID := srcPuppet.feedID
-    dstID := dstPuppet.feedID
+		srcID := srcPuppet.feedID
+		dstID := dstPuppet.feedID
 		m := fmt.Sprintf("%s should not follow %s\nactual: %s is following %s", srcID, dstID, srcID, dstID)
 		return TestError{err: errors.New("isfollowing returned true"), message: m}
 	}

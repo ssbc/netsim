@@ -112,7 +112,7 @@ func (s Simulator) execute() {
 		switch instr.command {
 		case "start":
 			name := instr.args[0]
-      p := Puppet{name: name, instanceID: s.portCounter}
+			p := Puppet{name: name, instanceID: s.portCounter}
 			go startPuppet(p)
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
@@ -120,7 +120,7 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
-      p.feedID = feedID
+			p.feedID = feedID
 			s.puppetMap[name] = p
 			s.incrementPort()
 			instr.TestSuccess()
