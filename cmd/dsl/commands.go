@@ -34,7 +34,7 @@ func asyncRequest(instance int, method muxrpc.Method, payload, response interfac
 	return nil
 }
 
-func sourceRequest(instance int, method muxrpc.Method) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
+func sourceRequest(instance int, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
 	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
 
 	c, err := client.NewTCP(18888+instance, secretFile)
@@ -43,7 +43,7 @@ func sourceRequest(instance int, method muxrpc.Method) (muxrpc.Endpoint, *muxrpc
 	}
 
 	ctx := context.TODO()
-	src, err := c.Source(ctx, muxrpc.TypeJSON, method)
+	src, err := c.Source(ctx, muxrpc.TypeJSON, method, opts)
 	return c, src, err
 }
 
@@ -64,7 +64,8 @@ func DoDisconnect(src, dst Puppet) error {
 }
 
 func queryLatest(p Puppet) ([]Latest, error) {
-	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"latest"})
+	var empty interface{}
+	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"latest"}, empty)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +136,14 @@ func DoWhoami(p Puppet) (string, error) {
 }
 
 func DoLog(p Puppet, n int) (string, error) {
-	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"createLogStream"})
+	type sourceOptions struct {
+		Limit   int  `json:"limit"`
+		Reverse bool `json:"reverse"`
+	}
+
+	// only get the last n logs
+	opts := sourceOptions{Limit: n, Reverse: true}
+	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"createLogStream"}, opts)
 	if err != nil {
 		return "", err
 	}
@@ -171,8 +179,7 @@ func DoLog(p Puppet, n int) (string, error) {
 			return "", err
 		}
 	}
-	length := len(response)
-	return strings.Join(response[length-n:length], "\n"), nil
+	return strings.Join(response, "\n"), nil
 }
 
 func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
