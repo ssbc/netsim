@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,36 +15,63 @@ import (
 	"github.com/ssb-ngi-pointer/netsim/client"
 )
 
-func queryLatestWithScript(src Puppet) ([]Latest, error) {
-	response, err := queryMuxrpc(src.instanceID, "latest")
-	if err != nil {
-		return nil, err
-	}
-	responses := splitResponses(response.String())
-	seqnos := make([]Latest, 0, len(responses))
-	for _, str := range responses {
-		var parsed Latest
-		json.Unmarshal(bytes.NewBufferString(str).Bytes(), &parsed)
-		seqnos = append(seqnos, parsed)
-	}
-	return seqnos, nil
-}
+func asyncRequest(instance int, method muxrpc.Method, payload, response interface{}) error {
+	port := 18888 + instance
+	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
 
-func queryLatest(p Puppet) ([]Latest, error) {
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, p.instanceID)
-
-	c, err := client.NewTCP(18888+p.instanceID, secretFile)
+	c, err := client.NewTCP(port, secretFile)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ctx := context.TODO()
-	src, err := c.Source(ctx, muxrpc.TypeJSON, muxrpc.Method{"latest"})
+	err = c.Async(ctx, &response, muxrpc.TypeJSON, method, payload)
+	if err != nil {
+		return err
+	}
+
+	c.Terminate()
+	return nil
+}
+
+func sourceRequest(instance int, method muxrpc.Method) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
+	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
+
+	c, err := client.NewTCP(18888+instance, secretFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx := context.TODO()
+	src, err := c.Source(ctx, muxrpc.TypeJSON, method)
+	return c, src, err
+}
+
+func DoConnect(src, dst Puppet) error {
+	portDst := 18888 + dst.instanceID
+	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
+
+	var response interface{}
+	return asyncRequest(src.instanceID, muxrpc.Method{"conn", "connect"}, dstMultiAddr, &response)
+}
+
+func DoDisconnect(src, dst Puppet) error {
+	portDst := 18888 + dst.instanceID
+	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
+
+	var response interface{}
+	return asyncRequest(src.instanceID, muxrpc.Method{"conn", "disconnect"}, dstMultiAddr, &response)
+}
+
+func queryLatest(p Puppet) ([]Latest, error) {
+	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"latest"})
+	defer c.Terminate()
 	if err != nil {
 		return nil, err
 	}
 
 	var seqnos []Latest
+	ctx := context.TODO()
 	for src.Next(ctx) {
 		var l Latest // todo: can switch out Latest with refs.KeyValueRaw / refs.KeyValueMap
 		err = src.Reader(func(rd io.Reader) error {
@@ -54,7 +80,6 @@ func queryLatest(p Puppet) ([]Latest, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		seqnos = append(seqnos, l)
 	}
 
@@ -62,68 +87,7 @@ func queryLatest(p Puppet) ([]Latest, error) {
 		return nil, err
 	}
 
-	c.Terminate()
 	return seqnos, nil
-}
-
-func DoConnect(src, dst Puppet) error {
-	portSrc := 18888 + src.instanceID
-	portDst := 18888 + dst.instanceID
-	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
-
-	CLI := "/home/cblgh/code/go/src/ssb/cmd/sbotcli/sbotcli"
-	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret call conn.connect %s`, CLI, portSrc, src.instanceID, dstMultiAddr)
-	response, err := runline(cmd)
-	if err != nil {
-		return err
-	}
-	taplog(response.String())
-	return nil
-}
-
-func DoConnectWithGoClient(src, dst Puppet) error {
-	portSrc := 18888 + src.instanceID
-	portDst := 18888 + dst.instanceID
-	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
-
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, src.instanceID)
-
-	c, err := client.NewTCP(portSrc, secretFile)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.TODO()
-	var response interface{}
-	err = c.Async(ctx, &response, muxrpc.TypeJSON, muxrpc.Method{"conn", "connect"}, dstMultiAddr)
-	if err != nil {
-		return err
-	}
-
-	c.Terminate()
-	return nil
-}
-
-func DoDisconnect(src, dst Puppet) error {
-	portSrc := 18888 + src.instanceID
-	portDst := 18888 + dst.instanceID
-	dstMultiAddr := multiserverAddr(dst.feedID, portDst)
-
-	CLI := "/home/cblgh/code/go/src/ssb/cmd/sbotcli/sbotcli"
-	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret call conn.stop`, CLI, portSrc, src.instanceID)
-	response, err := runline(cmd)
-	if err != nil {
-		return err
-	}
-	taplog(response.String())
-
-	cmd = fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret call conn.disconnect %s`, CLI, portSrc, src.instanceID, dstMultiAddr)
-	response, err = runline(cmd)
-	if err != nil {
-		return err
-	}
-	taplog(response.String())
-	return nil
 }
 
 // really bad Rammstein pun, sorry (absolutely not sorry)
@@ -161,57 +125,57 @@ func DoHast(src, dst Puppet, seqno string) error {
 }
 
 func DoWhoami(instance int) (string, error) {
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
-
-	c, err := client.NewTCP(18888+instance, secretFile)
-	if err != nil {
-		return "", err
-	}
-
-	ctx := context.TODO()
 	var parsed Whoami
-	err = c.Async(ctx, &parsed, muxrpc.TypeJSON, muxrpc.Method{"whoami"})
+	var empty interface{}
+	err := asyncRequest(instance, muxrpc.Method{"whoami"}, &empty, &parsed)
 	if err != nil {
 		return "", err
 	}
-
-	c.Terminate()
 	return parsed.ID.Ref(), nil
 }
 
 func DoLog(instance, n int) (string, error) {
-	response, err := queryMuxrpc(instance, "log")
+	c, src, err := sourceRequest(instance, muxrpc.Method{"createLogStream"})
+	defer c.Terminate()
 	if err != nil {
 		return "", err
 	}
 
-	responses := splitResponses(response.String())
-	length := len(responses)
-	return strings.Join(responses[length-n:length], "\n"), nil
+	var v interface{}
+	var response []string
+	ctx := context.TODO()
+	for src.Next(ctx) {
+		err = src.Reader(func(rd io.Reader) error {
+			// read all the json-encoded data as bytes
+			b, err := io.ReadAll(rd)
+			if err != nil {
+				return err
+			}
+			// decode it into a generic struct
+			err = json.Unmarshal(b, &v)
+			if err != nil {
+				return err
+			}
+			// interpret the struct as a map of [strings -> empty interfaces]
+			s := v.(map[string]interface{})
+			// marshall everything as bytes of json to get the correct indentation, prettifying the output
+			b, err = json.MarshalIndent(s, "", " ")
+			if err != nil {
+				return err
+			}
+			// encode the json bytes as utf-8 characters
+			response = append(response, string(b))
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	length := len(response)
+	return strings.Join(response[length-n:length], "\n"), nil
 }
 
 func DoFollow(instance int, feedID string, isFollow bool) error {
-	var followType string
-	if !isFollow { // => unfollow message
-		followType = "no-"
-	}
-	followMsg := fmt.Sprintf(`publish --type contact --contact %s --%sfollowing`, feedID, followType)
-	_, err := queryMuxrpc(instance, followMsg)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func DoFollowWithGoClient(instance int, feedID string, isFollow bool) error {
-	port := 18888 + instance
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
-
-	c, err := client.NewTCP(port, secretFile)
-	if err != nil {
-		return err
-	}
-
 	feedRef, err := refs.ParseFeedRef(feedID)
 	if err != nil {
 		return err
@@ -220,25 +184,39 @@ func DoFollowWithGoClient(instance int, feedID string, isFollow bool) error {
 	followContent := refs.NewContactFollow(feedRef)
 	followContent.Following = isFollow
 
-	ctx := context.TODO()
 	var response interface{}
-	err = c.Async(ctx, &response, muxrpc.TypeJSON, muxrpc.Method{"publish"}, followContent)
-	if err != nil {
-		return err
-	}
+	err = asyncRequest(instance, muxrpc.Method{"publish"}, followContent, &response)
+	return err
+}
 
-	c.Terminate()
-	return nil
+func DoPost(instance int) error {
+	post := refs.NewPost("bep")
+
+	var response interface{}
+	return asyncRequest(instance, muxrpc.Method{"publish"}, post, &response)
 }
 
 func queryIsFollowing(instance int, srcID, dstID string) (bool, error) {
-	msg := fmt.Sprintf(`friends.isFollowing --source %s --dest %s`, srcID, dstID)
-	res, err := queryMuxrpc(instance, msg)
+	srcRef, err := refs.ParseFeedRef(srcID)
 	if err != nil {
 		return false, err
 	}
-	isFollowing := strings.TrimSpace(res.String()) == "true"
-	return isFollowing, nil
+	dstRef, err := refs.ParseFeedRef(dstID)
+	if err != nil {
+		return false, err
+	}
+
+	arg := struct {
+		Source *refs.FeedRef `json:"source"`
+		Dest   *refs.FeedRef `json:"dest"`
+	}{Source: srcRef, Dest: dstRef}
+
+	var response interface{}
+	err = asyncRequest(instance, muxrpc.Method{"friends", "isFollowing"}, arg, &response)
+	if err != nil {
+		return false, err
+	}
+	return response.(bool), nil
 }
 
 func DoIsFollowing(instance int, srcID, dstID string) error {
@@ -261,48 +239,6 @@ func DoIsNotFollowing(instance int, srcID, dstID string) error {
 	if isFollowing {
 		m := fmt.Sprintf("%s should not follow %s\nactual: %s is following %s", srcID, dstID, srcID, dstID)
 		return TestError{err: errors.New("isfollowing returned true"), message: m}
-	}
-	return nil
-}
-
-func DoPost(instance int) error {
-	port := 18888 + instance
-	CLI := "/home/cblgh/code/go/src/ssb/cmd/sbotcli/sbotcli"
-	cmd := fmt.Sprintf(`%s -addr 192.168.88.18:%d --key /home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret publish post bep`, CLI, port, instance)
-	_, err := runline(cmd)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func DoPostWithGoClient(instance int) error {
-	port := 18888 + instance
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, instance)
-
-	c, err := client.NewTCP(port, secretFile)
-	if err != nil {
-		return err
-	}
-
-	post := refs.NewPost("bep")
-
-	ctx := context.TODO()
-	var response interface{}
-	err = c.Async(ctx, &response, muxrpc.TypeJSON, muxrpc.Method{"publish"}, post)
-	if err != nil {
-		return err
-	}
-
-	c.Terminate()
-	return nil
-}
-
-func DoLatest(instance int) error {
-	postMsg := "latest"
-	_, err := queryMuxrpc(instance, postMsg)
-	if err != nil {
-		return err
 	}
 	return nil
 }

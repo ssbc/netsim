@@ -178,7 +178,7 @@ func (s Simulator) execute() {
 		case "follow":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
-			err := DoFollowWithGoClient(srcPuppet.instanceID, dstPuppet.feedID, instr.command == "follow")
+			err := DoFollow(srcPuppet.instanceID, dstPuppet.feedID, instr.command == "follow")
 			s.evaluateRun(err)
 		case "isfollowing":
 			srcPuppet := s.getSrcPuppet()
@@ -192,7 +192,7 @@ func (s Simulator) execute() {
 			s.evaluateRun(err)
 		case "post":
 			srcPuppet := s.getSrcPuppet()
-			err := DoPostWithGoClient(srcPuppet.instanceID)
+			err := DoPost(srcPuppet.instanceID)
 			s.evaluateRun(err)
 		case "disconnect":
 			srcPuppet := s.getSrcPuppet()
@@ -202,7 +202,7 @@ func (s Simulator) execute() {
 		case "connect":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
-			err := DoConnectWithGoClient(srcPuppet, dstPuppet)
+			err := DoConnect(srcPuppet, dstPuppet)
 			s.evaluateRun(err)
 		case "has":
 			arg := strings.Split(instr.getSecond(), "@")
