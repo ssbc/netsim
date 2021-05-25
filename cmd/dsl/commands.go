@@ -65,15 +65,15 @@ func DoDisconnect(src, dst Puppet) error {
 
 func queryLatest(p Puppet) ([]Latest, error) {
 	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"latest"})
-	defer c.Terminate()
 	if err != nil {
 		return nil, err
 	}
+	defer c.Terminate()
 
 	var seqnos []Latest
 	ctx := context.TODO()
 	for src.Next(ctx) {
-		var l Latest // todo: can switch out Latest with refs.KeyValueRaw / refs.KeyValueMap
+		var l Latest
 		err = src.Reader(func(rd io.Reader) error {
 			return json.NewDecoder(rd).Decode(&l)
 		})
@@ -136,10 +136,10 @@ func DoWhoami(p Puppet) (string, error) {
 
 func DoLog(p Puppet, n int) (string, error) {
 	c, src, err := sourceRequest(p.instanceID, muxrpc.Method{"createLogStream"})
-	defer c.Terminate()
 	if err != nil {
 		return "", err
 	}
+	defer c.Terminate()
 
 	var v interface{}
 	var response []string
