@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,7 +40,11 @@ func parseTestLine(line string, id int) Instruction {
 }
 
 func readTest(filename string) []string {
-	testfile, err := ioutil.ReadFile(filename)
+	absfilename, err := filepath.Abs(filename)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	testfile, err := ioutil.ReadFile(absfilename)
 	if err != nil {
 		log.Fatalln(err)
 	}
