@@ -27,12 +27,11 @@ type Latest struct {
 }
 
 type Puppet struct {
-	Port       int
-	directory  string
-	feedID     string
-	name       string
-	instanceID int
-	seqno      int64
+	Port      int
+	directory string
+	feedID    string
+	name      string
+	seqno     int64
 }
 
 type TestError struct {
@@ -76,7 +75,9 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 }
 
 func makeSimulator(basePort int, puppetDir string, sbots []string) Simulator {
+	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
+
 	for _, bot := range sbots {
 		botDir, err := filepath.Abs(bot)
 		if err != nil {
@@ -86,11 +87,12 @@ func makeSimulator(basePort int, puppetDir string, sbots []string) Simulator {
 		// index language implementations by the last folder name
 		langMap[filepath.Base(botDir)] = botDir
 	}
+
 	absPuppetDir, err := filepath.Abs(puppetDir)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	puppetMap := make(map[string]Puppet)
+
 	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort}
 }
 
@@ -129,8 +131,11 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
+// TODO: add logic to check for port availability before tying port to puppet
 func (s *Simulator) acquirePort() int {
-	return s.basePort + s.portCounter
+	port := s.basePort + s.portCounter
+	s.incrementPort()
+	return port
 }
 
 func (s Simulator) execute() {
@@ -147,8 +152,7 @@ func (s Simulator) execute() {
 			}
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := path.Join(s.puppetDir, subfolder)
-			p := Puppet{name: name, directory: fullpath, instanceID: s.portCounter, Port: s.acquirePort()}
-			s.incrementPort()
+			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
 			go startPuppet(s, p, langImpl)
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
@@ -249,13 +253,9 @@ func main() {
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
 	var outdir string
 	flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
+	var basePort int
+	flag.IntVar(&basePort, "port", 18888, "start of port range used for each running sbot")
 	flag.Parse()
-
-	fmt.Println("language implementations:")
-	fmt.Println(flag.Args())
-	for i, dir := range flag.Args() {
-		fmt.Println(i, dir)
-	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
 	 * the puppet lives in another directory, which contains its secret.
@@ -270,7 +270,7 @@ func main() {
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
 	resetPuppetDir(outdir)
-	sim := makeSimulator(18888, outdir, flag.Args())
+	sim := makeSimulator(basePort, outdir, flag.Args())
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()

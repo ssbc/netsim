@@ -63,7 +63,7 @@ func DoDisconnect(src, dst Puppet) error {
 // TODO: use createLogStream opts here, as we use them in DoLog?
 func queryLatest(p Puppet) ([]Latest, error) {
 	var empty interface{}
-	c, src, err := sourceRequest(p, muxrpc.Method{"latest"}, empty)
+	c, src, err := sourceRequest(p, muxrpc.Method{"replicate", "upto"}, empty)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +242,7 @@ func DoIsNotFollowing(srcPuppet, dstPuppet Puppet) error {
 		return err
 	}
 	if isFollowing {
-		srcID := srcPuppet.feedID
-		dstID := dstPuppet.feedID
+		srcID, dstID := srcPuppet.feedID, dstPuppet.feedID
 		m := fmt.Sprintf("%s should not follow %s\nactual: %s is following %s", srcID, dstID, srcID, dstID)
 		return TestError{err: errors.New("isfollowing returned true"), message: m}
 	}
