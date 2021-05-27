@@ -213,6 +213,27 @@ func (s Simulator) execute() {
 	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
+func resetPuppetDir(dir string) {
+	if dir == "/" || dir == "~" || dir == "C:/" {
+		fmt.Println("you are trying to remove an important system folder, netsim will stop execution instead")
+		os.Exit(0)
+	}
+	absdir, err := filepath.Abs(dir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	// remove the puppet dir and its subfolders
+	err = os.RemoveAll(absdir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	// recreate it
+	err = os.Mkdir(absdir, 0777)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 func main() {
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
@@ -237,6 +258,7 @@ func main() {
 	 *   an output directory containing all puppet folders
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
+	resetPuppetDir(outdir)
 	sim := makeSimulator(18888, outdir)
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
