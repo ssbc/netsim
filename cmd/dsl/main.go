@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -44,18 +45,14 @@ func (t TestError) Error() string {
 }
 
 type Simulator struct {
-	puppetMap    map[string]Puppet
-	puppetDir    string
-	portCounter  int
-	instr        Instruction
-	instructions []Instruction
-	basePort     int
+	puppetMap       map[string]Puppet
+	puppetDir       string
+	portCounter     int
+	instr           Instruction
+	instructions    []Instruction
+	basePort        int
+	implementations map[string]string
 }
-
-const (
-	JS_SHIM = "/home/cblgh/code/netsim-experiments/ssb-server/sim-shim.sh"
-	GO_SHIM = "/home/cblgh/code/go/src/go-ssb/cmd/go-sbot/sim-shim.sh"
-)
 
 func startPuppet(s Simulator, p Puppet, shim string) error {
 	filename := path.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
@@ -65,7 +62,10 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 	}
 	defer logfile.Close()
 	var cmd *exec.Cmd
-	cmd = exec.Command(shim, p.directory, strconv.Itoa(p.Port))
+	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
+	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
+	// e.g. reading the passed in ssb directory ($1) and port ($2)
+	cmd = exec.Command(path.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
 	cmd.Stderr = logfile
 	cmd.Stdout = logfile
 	err = cmd.Run()
@@ -75,13 +75,23 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 	return nil
 }
 
-func makeSimulator(basePort int, dir string) Simulator {
-	absdir, err := filepath.Abs(dir)
+func makeSimulator(basePort int, puppetDir string, sbots []string) Simulator {
+	langMap := make(map[string]string)
+	for _, bot := range sbots {
+		botDir, err := filepath.Abs(bot)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		// index language implementations by the last folder name
+		langMap[filepath.Base(botDir)] = botDir
+	}
+	absPuppetDir, err := filepath.Abs(puppetDir)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	puppetMap := make(map[string]Puppet)
-	return Simulator{puppetMap: puppetMap, puppetDir: absdir, basePort: basePort}
+	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort}
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -130,16 +140,16 @@ func (s Simulator) execute() {
 		case "start":
 			name := instr.args[0]
 			langImpl := instr.args[1]
+			if _, ok := s.implementations[langImpl]; !ok {
+				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
+				instr.TestFailure(err)
+				continue
+			}
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := path.Join(s.puppetDir, subfolder)
 			p := Puppet{name: name, directory: fullpath, instanceID: s.portCounter, Port: s.acquirePort()}
 			s.incrementPort()
-			switch langImpl {
-			case "go":
-				go startPuppet(s, p, GO_SHIM)
-			case "js":
-				go startPuppet(s, p, JS_SHIM)
-			}
+			go startPuppet(s, p, langImpl)
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
 			if err != nil {
@@ -242,6 +252,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("language implementations:")
+	fmt.Println(flag.Args())
 	for i, dir := range flag.Args() {
 		fmt.Println(i, dir)
 	}
@@ -259,7 +270,7 @@ func main() {
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
 	resetPuppetDir(outdir)
-	sim := makeSimulator(18888, outdir)
+	sim := makeSimulator(18888, outdir, flag.Args())
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()
