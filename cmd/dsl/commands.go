@@ -22,7 +22,11 @@ func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{})
 	}
 
 	ctx := context.TODO()
-	err = c.Async(ctx, &response, muxrpc.TypeJSON, method, payload)
+	muxEncodingType := muxrpc.TypeJSON
+	if method[0] == "publish" {
+		muxEncodingType = muxrpc.TypeString
+	}
+	err = c.Async(ctx, response, muxEncodingType, method, payload)
 	if err != nil {
 		return err
 	}
@@ -185,7 +189,7 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 	followContent := refs.NewContactFollow(feedRef)
 	followContent.Following = isFollow
 
-	var response interface{}
+	var response string
 	err = asyncRequest(srcPuppet, muxrpc.Method{"publish"}, followContent, &response)
 	return err
 }
@@ -193,7 +197,7 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 func DoPost(p Puppet) error {
 	post := refs.NewPost("bep")
 
-	var response interface{}
+	var response string
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 

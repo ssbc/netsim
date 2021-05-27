@@ -220,11 +220,9 @@ func main() {
 	flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
 	flag.Parse()
 
-	if len(os.Args) > 1 {
-		fmt.Println("language implementations:")
-		for i, dir := range os.Args[1:] {
-			fmt.Println(i, dir)
-		}
+	fmt.Println("language implementations:")
+	for i, dir := range flag.Args() {
+		fmt.Println(i, dir)
 	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
