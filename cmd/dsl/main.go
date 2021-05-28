@@ -107,15 +107,21 @@ func (s *Simulator) incrementPort() {
 	s.portCounter += 1
 }
 
-func (s *Simulator) ParseTest(lines []string) {
+func (s *Simulator) ParseTest(lines []string, verbose bool) {
 	s.instructions = make([]Instruction, 0, len(lines))
-	fmt.Println("## Start test file")
+	if verbose {
+		fmt.Println("## Start test file")
+	}
 	for i, line := range lines {
 		instr := parseTestLine(line, i+1)
-		instr.Print()
+		if verbose {
+			instr.Print()
+		}
 		s.instructions = append(s.instructions, instr)
 	}
-	fmt.Println("## End test file")
+	if verbose {
+		fmt.Println("## End test file")
+	}
 }
 
 func (s Simulator) evaluateRun(err error) {
@@ -254,6 +260,8 @@ func main() {
 	flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
 	var basePort int
 	flag.IntVar(&basePort, "port", 18888, "start of port range used for each running sbot")
+	var verbose bool
+	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
 	flag.Parse()
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
@@ -271,6 +279,6 @@ func main() {
 	resetPuppetDir(outdir)
 	sim := makeSimulator(basePort, outdir, flag.Args())
 	lines := readTest(testfile)
-	sim.ParseTest(lines)
+	sim.ParseTest(lines, verbose)
 	sim.execute()
 }
