@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -50,11 +51,18 @@ type Simulator struct {
 	instructions    []Instruction
 	basePort        int
 	implementations map[string]string
+	verbose         bool
 }
 
 func startPuppet(s Simulator, p Puppet, shim string) error {
 	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
 	logfile, err := os.Create(filename)
+	// io.MultiWriter is golang's equivalent of running unix pipes with tee
+	var writer io.Writer
+	writer = logfile
+	if s.verbose {
+		writer = io.MultiWriter(logfile, os.Stdout)
+	}
 	if err != nil {
 		return TestError{err: err, message: "could not create log file"}
 	}
@@ -64,8 +72,8 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
 	// e.g. reading the passed in ssb directory ($1) and port ($2)
 	cmd = exec.Command(filepath.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
-	cmd.Stderr = logfile
-	cmd.Stdout = logfile
+	cmd.Stderr = writer
+	cmd.Stdout = writer
 	err = cmd.Run()
 	if err != nil {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
@@ -73,7 +81,7 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 	return nil
 }
 
-func makeSimulator(basePort int, puppetDir string, sbots []string) Simulator {
+func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
 
@@ -92,7 +100,7 @@ func makeSimulator(basePort int, puppetDir string, sbots []string) Simulator {
 		log.Fatalln(err)
 	}
 
-	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort}
+	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort, verbose: verbose}
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -107,19 +115,19 @@ func (s *Simulator) incrementPort() {
 	s.portCounter += 1
 }
 
-func (s *Simulator) ParseTest(lines []string, verbose bool) {
+func (s *Simulator) ParseTest(lines []string) {
 	s.instructions = make([]Instruction, 0, len(lines))
-	if verbose {
+	if s.verbose {
 		fmt.Println("## Start test file")
 	}
 	for i, line := range lines {
 		instr := parseTestLine(line, i+1)
-		if verbose {
+		if s.verbose {
 			instr.Print()
 		}
 		s.instructions = append(s.instructions, instr)
 	}
-	if verbose {
+	if s.verbose {
 		fmt.Println("## End test file")
 	}
 }
@@ -233,9 +241,11 @@ func (s Simulator) execute() {
 }
 
 func resetPuppetDir(dir string) {
-	if dir == "/" || dir == "~" || dir == "C:/" {
-		fmt.Println("you are trying to remove an important system folder, netsim will stop execution instead")
-		os.Exit(0)
+	// introduce convention that the output dir is called puppets.
+	// this fixes edgecases of accidentally removing unintended
+	// folders + files
+	if filepath.Base(dir) != "puppets" {
+		dir = filepath.Join(dir, "puppets")
 	}
 	absdir, err := filepath.Abs(dir)
 	if err != nil {
@@ -277,8 +287,8 @@ func main() {
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
 	resetPuppetDir(outdir)
-	sim := makeSimulator(basePort, outdir, flag.Args())
+	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
 	lines := readTest(testfile)
-	sim.ParseTest(lines, verbose)
+	sim.ParseTest(lines)
 	sim.execute()
 }
