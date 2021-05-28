@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -54,7 +53,7 @@ type Simulator struct {
 }
 
 func startPuppet(s Simulator, p Puppet, shim string) error {
-	filename := path.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
+	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
 	logfile, err := os.Create(filename)
 	if err != nil {
 		return TestError{err: err, message: "could not create log file"}
@@ -64,7 +63,7 @@ func startPuppet(s Simulator, p Puppet, shim string) error {
 	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
 	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
 	// e.g. reading the passed in ssb directory ($1) and port ($2)
-	cmd = exec.Command(path.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
+	cmd = exec.Command(filepath.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
 	cmd.Stderr = logfile
 	cmd.Stdout = logfile
 	err = cmd.Run()
@@ -151,7 +150,7 @@ func (s Simulator) execute() {
 				continue
 			}
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
-			fullpath := path.Join(s.puppetDir, subfolder)
+			fullpath := filepath.Join(s.puppetDir, subfolder)
 			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
 			go startPuppet(s, p, langImpl)
 			time.Sleep(1 * time.Second)
