@@ -16,15 +16,17 @@ import (
 )
 
 func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{}) error {
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, p.instanceID)
-
-	c, err := client.NewTCP(p.Port, secretFile)
+	c, err := client.NewTCP(p.Port, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return err
 	}
 
 	ctx := context.TODO()
-	err = c.Async(ctx, &response, muxrpc.TypeJSON, method, payload)
+	muxEncodingType := muxrpc.TypeJSON
+	if method[0] == "publish" {
+		muxEncodingType = muxrpc.TypeString
+	}
+	err = c.Async(ctx, response, muxEncodingType, method, payload)
 	if err != nil {
 		return err
 	}
@@ -34,9 +36,7 @@ func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{})
 }
 
 func sourceRequest(p Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
-	secretFile := fmt.Sprintf(`/home/cblgh/code/netsim-experiments/ssb-server/puppet_%d/secret`, p.instanceID)
-
-	c, err := client.NewTCP(p.Port, secretFile)
+	c, err := client.NewTCP(p.Port, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,7 +63,7 @@ func DoDisconnect(src, dst Puppet) error {
 // TODO: use createLogStream opts here, as we use them in DoLog?
 func queryLatest(p Puppet) ([]Latest, error) {
 	var empty interface{}
-	c, src, err := sourceRequest(p, muxrpc.Method{"latest"}, empty)
+	c, src, err := sourceRequest(p, muxrpc.Method{"replicate", "upto"}, empty)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 	followContent := refs.NewContactFollow(feedRef)
 	followContent.Following = isFollow
 
-	var response interface{}
+	var response string
 	err = asyncRequest(srcPuppet, muxrpc.Method{"publish"}, followContent, &response)
 	return err
 }
@@ -197,7 +197,7 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 func DoPost(p Puppet) error {
 	post := refs.NewPost("bep")
 
-	var response interface{}
+	var response string
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 
@@ -242,8 +242,7 @@ func DoIsNotFollowing(srcPuppet, dstPuppet Puppet) error {
 		return err
 	}
 	if isFollowing {
-		srcID := srcPuppet.feedID
-		dstID := dstPuppet.feedID
+		srcID, dstID := srcPuppet.feedID, dstPuppet.feedID
 		m := fmt.Sprintf("%s should not follow %s\nactual: %s is following %s", srcID, dstID, srcID, dstID)
 		return TestError{err: errors.New("isfollowing returned true"), message: m}
 	}

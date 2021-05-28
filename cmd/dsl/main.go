@@ -1,10 +1,14 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -23,11 +27,11 @@ type Latest struct {
 }
 
 type Puppet struct {
-	Port       int
-	feedID     string
-	name       string
-	instanceID int
-	seqno      int64
+	Port      int
+	directory string
+	feedID    string
+	name      string
+	seqno     int64
 }
 
 type TestError struct {
@@ -40,37 +44,63 @@ func (t TestError) Error() string {
 }
 
 type Simulator struct {
-	puppetMap    map[string]Puppet
-	portCounter  int
-	instr        Instruction
-	instructions []Instruction
-	basePort     int
+	puppetMap       map[string]Puppet
+	puppetDir       string
+	portCounter     int
+	instr           Instruction
+	instructions    []Instruction
+	basePort        int
+	implementations map[string]string
+	verbose         bool
 }
 
-const (
-	PUPPETSCRIPT = "/home/cblgh/code/netsim-experiments/ssb-server/start-nodejs-puppet.sh"
-)
-
-func startPuppet(p Puppet) error {
-	filename := fmt.Sprintf("./log-%s.txt", p.name)
-	outfile, err := os.Create(filename)
+func startPuppet(s Simulator, p Puppet, shim string) error {
+	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
+	logfile, err := os.Create(filename)
+	// io.MultiWriter is golang's equivalent of running unix pipes with tee
+	var writer io.Writer
+	writer = logfile
+	if s.verbose {
+		writer = io.MultiWriter(logfile, os.Stdout)
+	}
 	if err != nil {
 		return TestError{err: err, message: "could not create log file"}
 	}
-	defer outfile.Close()
-	cmd := exec.Command(PUPPETSCRIPT, strconv.Itoa(p.instanceID))
-	cmd.Stderr = outfile
-	cmd.Stdout = outfile
+	defer logfile.Close()
+	var cmd *exec.Cmd
+	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
+	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
+	// e.g. reading the passed in ssb directory ($1) and port ($2)
+	cmd = exec.Command(filepath.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
+	cmd.Stderr = writer
+	cmd.Stdout = writer
 	err = cmd.Run()
 	if err != nil {
-		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information")}
+		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
 	}
 	return nil
 }
 
-func makeSimulator() Simulator {
+func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool) Simulator {
 	puppetMap := make(map[string]Puppet)
-	return Simulator{puppetMap: puppetMap}
+	langMap := make(map[string]string)
+
+	for _, bot := range sbots {
+		botDir, err := filepath.Abs(bot)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		// index language implementations by the last folder name
+		langMap[filepath.Base(botDir)] = botDir
+	}
+
+	absPuppetDir, err := filepath.Abs(puppetDir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort, verbose: verbose}
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -87,13 +117,19 @@ func (s *Simulator) incrementPort() {
 
 func (s *Simulator) ParseTest(lines []string) {
 	s.instructions = make([]Instruction, 0, len(lines))
-	fmt.Println("## Start test file")
+	if s.verbose {
+		fmt.Println("## Start test file")
+	}
 	for i, line := range lines {
 		instr := parseTestLine(line, i+1)
-		instr.Print()
+		if s.verbose {
+			instr.Print()
+		}
 		s.instructions = append(s.instructions, instr)
 	}
-	fmt.Println("## End test file")
+	if s.verbose {
+		fmt.Println("## End test file")
+	}
 }
 
 func (s Simulator) evaluateRun(err error) {
@@ -108,8 +144,11 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
+// TODO: add logic to check for port availability before tying port to puppet
 func (s *Simulator) acquirePort() int {
-	return s.basePort + s.portCounter
+	port := s.basePort + s.portCounter
+	s.incrementPort()
+	return port
 }
 
 func (s Simulator) execute() {
@@ -118,8 +157,16 @@ func (s Simulator) execute() {
 		switch instr.command {
 		case "start":
 			name := instr.args[0]
-			p := Puppet{name: name, instanceID: s.portCounter, Port: s.acquirePort()}
-			go startPuppet(p)
+			langImpl := instr.args[1]
+			if _, ok := s.implementations[langImpl]; !ok {
+				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
+				instr.TestFailure(err)
+				continue
+			}
+			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
+			fullpath := filepath.Join(s.puppetDir, subfolder)
+			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
+			go startPuppet(s, p, langImpl)
 			time.Sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
 			if err != nil {
@@ -128,10 +175,9 @@ func (s Simulator) execute() {
 			}
 			p.feedID = feedID
 			s.puppetMap[name] = p
-			s.incrementPort()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
-			taplog(fmt.Sprintf("logging to log-%s.txt", name))
+			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "log":
 			srcPuppet := s.getSrcPuppet()
 			amount, err := strconv.Atoi(instr.getSecond())
@@ -194,10 +240,55 @@ func (s Simulator) execute() {
 	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
+func resetPuppetDir(dir string) {
+	// introduce convention that the output dir is called puppets.
+	// this fixes edgecases of accidentally removing unintended
+	// folders + files
+	if filepath.Base(dir) != "puppets" {
+		dir = filepath.Join(dir, "puppets")
+	}
+	absdir, err := filepath.Abs(dir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	// remove the puppet dir and its subfolders
+	err = os.RemoveAll(absdir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	// recreate it
+	err = os.Mkdir(absdir, 0777)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 func main() {
-	sim := makeSimulator()
-	sim.basePort = 18888
-	lines := readTest("test.txt")
+	var testfile string
+	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
+	var outdir string
+	flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
+	var basePort int
+	flag.IntVar(&basePort, "port", 18888, "start of port range used for each running sbot")
+	var verbose bool
+	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
+	flag.Parse()
+	/*
+	 * the language implementation dir contains the code for starting a puppet, via a shim.
+	 * the puppet lives in another directory, which contains its secret.
+	 *
+	 * the language implementation needs to be passed:
+	 *   the directory of the puppet's secret
+	 *   the ports it will use
+	 *
+	 * the puppet directory needs to be created, and a secret needs to be instantiated for it.
+	 * requirements:
+	 *   an output directory containing all puppet folders
+	 *   some way to instantiate seeded secrets for each puppet
+	 */
+	resetPuppetDir(outdir)
+	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
+	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()
 }
