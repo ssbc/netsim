@@ -151,7 +151,18 @@ func (s *Simulator) acquirePort() int {
 	return port
 }
 
+type Sleeper struct {
+	elapsed time.Time
+}
+
+func (s *Sleeper) sleep(d time.Duration) {
+	s.elapsed = s.elapsed.Add(d)
+	time.Sleep(d)
+}
+
 func (s Simulator) execute() {
+	var sleeper Sleeper
+	start := time.Now()
 	for _, instr := range s.instructions {
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
@@ -167,7 +178,7 @@ func (s Simulator) execute() {
 			fullpath := filepath.Join(s.puppetDir, subfolder)
 			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
 			go startPuppet(s, p, langImpl)
-			time.Sleep(1 * time.Second)
+			sleeper.sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
 			if err != nil {
 				instr.TestFailure(err)
@@ -193,7 +204,7 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
-			time.Sleep(ms)
+			sleeper.sleep(ms)
 			instr.TestSuccess()
 		case "unfollow":
 			fallthrough
@@ -234,9 +245,23 @@ func (s Simulator) execute() {
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
+
 			instr.Print()
 		}
 	}
+
+	end := time.Now()
+	elapsed := end.Sub(start)
+	var t time.Time
+	t = t.Add(elapsed)
+
+	cpuTime := t.Sub(sleeper.elapsed)
+
+	taplog("End of simulation")
+	taplog(fmt.Sprintf("Total time elapsed: %s", elapsed.String()))
+	taplog(fmt.Sprintf("Active time: %s", cpuTime.String()))
+
+	taplog(fmt.Sprintf("Puppet count: %d", len(s.puppetMap)))
 	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
@@ -261,7 +286,7 @@ func preparePuppetDir(dir string) string {
 	if err != nil {
 		log.Fatalln(err)
 	}
-  return absdir
+	return absdir
 }
 
 func main() {
