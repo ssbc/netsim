@@ -240,7 +240,7 @@ func (s Simulator) execute() {
 	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
-func resetPuppetDir(dir string) {
+func preparePuppetDir(dir string) string {
 	// introduce convention that the output dir is called puppets.
 	// this fixes edgecases of accidentally removing unintended
 	// folders + files
@@ -261,6 +261,7 @@ func resetPuppetDir(dir string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+  return absdir
 }
 
 func main() {
@@ -286,7 +287,7 @@ func main() {
 	 *   an output directory containing all puppet folders
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
-	resetPuppetDir(outdir)
+	outdir = preparePuppetDir(outdir)
 	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
