@@ -117,7 +117,7 @@ func DoHast(src, dst Puppet, seqno string) error {
 	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dstViaDst.ID {
 		return nil
 	} else {
-		m := fmt.Sprintf("expected sequence: %s at seq %d\nwas sequence %s at seq %d", dstViaDst.ID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
+		m := fmt.Sprintf("expected: %s at sequence %d\nwas: %s at sequence %d", dstViaDst.ID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
 		return TestError{err: errors.New("sequences didn't match"), message: m}
 	}
 }

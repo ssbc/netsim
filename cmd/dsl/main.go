@@ -245,7 +245,6 @@ func (s Simulator) execute() {
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
-
 			instr.Print()
 		}
 	}
@@ -254,14 +253,13 @@ func (s Simulator) execute() {
 	elapsed := end.Sub(start)
 	var t time.Time
 	t = t.Add(elapsed)
-
 	cpuTime := t.Sub(sleeper.elapsed)
 
 	taplog("End of simulation")
-	taplog(fmt.Sprintf("Total time elapsed: %s", elapsed.String()))
+	taplog(fmt.Sprintf("Total time: %s", elapsed.String()))
 	taplog(fmt.Sprintf("Active time: %s", cpuTime.String()))
-
 	taplog(fmt.Sprintf("Puppet count: %d", len(s.puppetMap)))
+
 	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
