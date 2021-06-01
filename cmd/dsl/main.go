@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,10 +112,6 @@ func (s Simulator) getDstPuppet() Puppet {
 	return s.puppetMap[s.instr.getDst()]
 }
 
-func (s *Simulator) incrementPort() {
-	s.portCounter += 1
-}
-
 func (s *Simulator) ParseTest(lines []string) {
 	s.instructions = make([]Instruction, 0, len(lines))
 	if s.verbose {
@@ -144,11 +141,33 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
-// TODO: add logic to check for port availability before tying port to puppet
+func listenOnPort(port int) bool {
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	if err != nil {
+		// we couldn't use this port, close the socket & try a new one
+		return false
+	}
+	// success! we could listen on the port, which means we can use it!
+	// close the opened socket and return the port
+	l.Close()
+	return true
+}
+
 func (s *Simulator) acquirePort() int {
-	port := s.basePort + s.portCounter
-	s.incrementPort()
-	return port
+	maxAttempts := 100
+	startPort := s.basePort + s.portCounter
+	for i := 0; i < maxAttempts; i = i + 2 {
+		port := s.basePort + s.portCounter
+		s.portCounter += 2
+		// try to acquire two sequential ports: one for muxrpc communication, the other for sbot's websockets support.
+		// websockets is currently not used by the netsim, but the port needs to be specified for the sbots process
+		if listenOnPort(port) && listenOnPort(port+1) {
+			// if we could acquire the two ports, we're done! we have found two usable ports for one of our puppets
+			return port
+		}
+	}
+	log.Fatalf("Could not find any connectable ports in the range [%d, %d]", startPort, startPort+maxAttempts)
+	return -1
 }
 
 type Sleeper struct {
