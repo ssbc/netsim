@@ -120,7 +120,6 @@ func DoHast(src, dst Puppet, seqno string) error {
 		m := fmt.Sprintf("expected sequence: %s at seq %d\nwas sequence %s at seq %d", dstViaDst.ID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
 		return TestError{err: errors.New("sequences didn't match"), message: m}
 	}
-	return nil
 }
 
 func DoWhoami(p Puppet) (string, error) {
