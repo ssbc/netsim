@@ -322,7 +322,9 @@ func (s Simulator) execute() {
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
-			instr.Print()
+			// unknown command, abort test run
+			instr.TestAbort(errors.New("Unknown simulator command"))
+			s.exit()
 		}
 	}
 
@@ -374,6 +376,12 @@ func monitorInterrupts(sim Simulator) {
 	}()
 }
 
+func (s Simulator) exit() {
+	taplog("Closing all puppets")
+	s.cancelExecution()
+	time.Sleep(1 * time.Second)
+}
+
 func main() {
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
@@ -409,7 +417,5 @@ func main() {
 	sim.execute()
 
 	// once we are done we want all puppets to exit
-	taplog("Closing all puppets")
-	sim.cancelExecution()
-	time.Sleep(1 * time.Second)
+	sim.exit()
 }

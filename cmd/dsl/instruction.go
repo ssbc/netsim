@@ -24,6 +24,10 @@ func (instr Instruction) TestFailure(err error) {
 	taplog(err.Error())
 }
 
+func (instr Instruction) TestAbort(err error) {
+	fmt.Printf("Bail out! %s (%s)\n", err.Error(), instr.line)
+}
+
 func (instr Instruction) getSrc() string {
 	return instr.args[0]
 }
