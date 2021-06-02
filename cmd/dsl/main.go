@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net"
@@ -165,30 +166,36 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
-func listenOnPort(port int) bool {
+func listenOnPort(port int) error {
 	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		// we couldn't use this port, close the socket & try a new one
-		return false
+		return err
 	}
 	// success! we could listen on the port, which means we can use it!
 	// close the opened socket and return the port
 	l.Close()
-	return true
+	return nil
 }
 
 func (s *Simulator) acquirePort() int {
 	maxAttempts := 100
 	startPort := s.basePort + s.portCounter
+
 	for i := 0; i < maxAttempts; i = i + 2 {
 		port := s.basePort + s.portCounter
 		s.portCounter += 2
 		// try to acquire two sequential ports: one for muxrpc communication, the other for sbot's websockets support.
 		// websockets is currently not used by the netsim, but the port needs to be specified for the sbots process
-		if listenOnPort(port) && listenOnPort(port+1) {
-			// if we could acquire the two ports, we're done! we have found two usable ports for one of our puppets
-			return port
+		g := new(errgroup.Group)
+		g.Go(func() error { return listenOnPort(port) })
+		g.Go(func() error { return listenOnPort(port + 1) })
+		err := g.Wait()
+		if err != nil {
+			continue
 		}
+		// if we could acquire the two ports, we're done! we have found two usable ports for one of our puppets
+		return port
 	}
 	log.Fatalf("Could not find any connectable ports in the range [%d, %d]", startPort, startPort+maxAttempts)
 	return -1

@@ -3,11 +3,12 @@ module github.com/ssb-ngi-pointer/netsim
 go 1.16
 
 require (
-	go.cryptoscope.co/muxrpc/v2 v2.0.6 // indirect
-	go.cryptoscope.co/netwrap v0.1.0 // indirect
-	go.cryptoscope.co/nocomment v0.0.0-20210520094614-fb744e81f810 // indirect
-	go.cryptoscope.co/secretstream v1.2.3 // indirect
-	go.mindeco.de/ssb-refs v0.2.0 // indirect
+	go.cryptoscope.co/muxrpc/v2 v2.0.6
+	go.cryptoscope.co/netwrap v0.1.0
+	go.cryptoscope.co/nocomment v0.0.0-20210520094614-fb744e81f810
+	go.cryptoscope.co/secretstream v1.2.3
+	go.mindeco.de/ssb-refs v0.2.0
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
 // We need our internal/extra25519 since agl pulled his repo recently.
