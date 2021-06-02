@@ -43,7 +43,8 @@ type Puppet struct {
 
 func (p *Puppet) start(s Simulator, shim string) error {
 	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
-	logfile, err := os.Create(filename)
+	// open the log file and append to it. if it doesn't exist, create it first
+	logfile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	// io.MultiWriter is golang's equivalent of running unix pipes with tee
 	var writer io.Writer
 	writer = logfile
@@ -73,6 +74,11 @@ func (p *Puppet) start(s Simulator, shim string) error {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
 	}
 	return nil
+}
+
+func (p Puppet) stop() {
+	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
+	p.stopProcess()
 }
 
 type TestError struct {
@@ -248,6 +254,18 @@ func (s Simulator) execute() {
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
+		case "stop":
+			name := instr.args[0]
+			p, ok := s.puppetMap[name]
+			if !ok {
+				err := errors.New(fmt.Sprintf("no puppet named %s currently running", name))
+				instr.TestFailure(err)
+				continue
+			}
+			p.stop()
+			delete(s.puppetMap, name)
+			instr.TestSuccess()
+			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
 			srcPuppet := s.getSrcPuppet()
 			amount, err := strconv.Atoi(instr.getSecond())
