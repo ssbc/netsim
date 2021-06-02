@@ -366,13 +366,13 @@ func preparePuppetDir(dir string) string {
 	return absdir
 }
 
-func monitorInterrupts(sim Simulator) {
+func (s Simulator) monitorInterrupts() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		sig := <-c
 		taplog(fmt.Sprintf("received shutdown signal, shutting down (signal %s)\n", sig.String()))
-		sim.cancelExecution()
+		s.cancelExecution()
 	}()
 }
 
@@ -408,9 +408,8 @@ func main() {
 
 	outdir = preparePuppetDir(outdir)
 	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
-
 	// monitor system interrupts via cmd-c/mod-c
-	monitorInterrupts(sim)
+	sim.monitorInterrupts()
 
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
