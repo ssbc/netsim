@@ -214,11 +214,10 @@ func (s Simulator) execute() {
 	var sleeper Sleeper
 	start := time.Now()
 	for _, instr := range s.instructions {
-
+		// check if we have received any cancellations before continuing on to process test commands
 		select {
 		case <-s.rootCtx.Done():
-			//TODO log properly
-			fmt.Println("context canceld. stopping execution")
+			taplog("Context canceled, stopping execution")
 			return
 		default:
 			// keep running
@@ -347,6 +346,16 @@ func preparePuppetDir(dir string) string {
 	return absdir
 }
 
+func monitorInterrupts(sim Simulator) {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-c
+		taplog(fmt.Sprintf("received shutdown signal, shutting down (signal %s)\n", sig.String()))
+		sim.cancelExecution()
+	}()
+}
+
 func main() {
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
@@ -374,21 +383,15 @@ func main() {
 	outdir = preparePuppetDir(outdir)
 	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-c
-		fmt.Println("event", "killed", "msg", "received signal, shutting down", "signal", sig.String())
-		sim.cancelExecution()
-	}()
+	// monitor system interrupts via cmd-c/mod-c
+	monitorInterrupts(sim)
 
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()
 
 	// once we are done we want all puppets to exit
-	fmt.Println("closing all puppets")
+	taplog("Closing all puppets")
 	sim.cancelExecution()
 	time.Sleep(1 * time.Second)
-
 }
