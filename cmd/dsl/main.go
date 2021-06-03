@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	refs "go.mindeco.de/ssb-refs"
@@ -33,6 +37,48 @@ type Puppet struct {
 	feedID    string
 	name      string
 	seqno     int64
+
+	stopProcess context.CancelFunc
+}
+
+func (p *Puppet) start(s Simulator, shim string) error {
+	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
+	// open the log file and append to it. if it doesn't exist, create it first
+	logfile, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// io.MultiWriter is golang's equivalent of running unix pipes with tee
+	var writer io.Writer
+	writer = logfile
+	if s.verbose {
+		writer = io.MultiWriter(logfile, os.Stdout)
+	}
+	if err != nil {
+		return TestError{err: err, message: "could not create log file"}
+	}
+	defer logfile.Close()
+	var cmd *exec.Cmd
+
+	// construct child context for individual cancelation/stopping
+	var ctx context.Context
+	ctx, p.stopProcess = context.WithCancel(s.rootCtx)
+
+	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
+	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
+	// e.g. reading the passed in ssb directory ($1) and port ($2)
+
+	shimPath := filepath.Join(s.implementations[shim], "sim-shim.sh")
+	cmd = exec.CommandContext(ctx, shimPath, p.directory, strconv.Itoa(p.Port))
+	cmd.Stderr = writer
+	cmd.Stdout = writer
+	err = cmd.Run()
+	if err != nil {
+		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
+	}
+	return nil
+}
+
+func (p Puppet) stop() {
+	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
+	p.stopProcess()
 }
 
 type TestError struct {
@@ -53,33 +99,9 @@ type Simulator struct {
 	basePort        int
 	implementations map[string]string
 	verbose         bool
-}
 
-func startPuppet(s Simulator, p Puppet, shim string) error {
-	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
-	logfile, err := os.Create(filename)
-	// io.MultiWriter is golang's equivalent of running unix pipes with tee
-	var writer io.Writer
-	writer = logfile
-	if s.verbose {
-		writer = io.MultiWriter(logfile, os.Stdout)
-	}
-	if err != nil {
-		return TestError{err: err, message: "could not create log file"}
-	}
-	defer logfile.Close()
-	var cmd *exec.Cmd
-	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
-	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
-	// e.g. reading the passed in ssb directory ($1) and port ($2)
-	cmd = exec.Command(filepath.Join(s.implementations[shim], "sim-shim.sh"), p.directory, strconv.Itoa(p.Port))
-	cmd.Stderr = writer
-	cmd.Stdout = writer
-	err = cmd.Run()
-	if err != nil {
-		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
-	}
-	return nil
+	rootCtx         context.Context
+	cancelExecution context.CancelFunc
 }
 
 func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool) Simulator {
@@ -101,7 +123,16 @@ func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool)
 		log.Fatalln(err)
 	}
 
-	return Simulator{puppetMap: puppetMap, puppetDir: absPuppetDir, implementations: langMap, basePort: basePort, verbose: verbose}
+	sim := Simulator{
+		puppetMap:       puppetMap,
+		puppetDir:       absPuppetDir,
+		implementations: langMap,
+		basePort:        basePort,
+		verbose:         verbose,
+	}
+
+	sim.rootCtx, sim.cancelExecution = context.WithCancel(context.Background())
+	return sim
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -141,30 +172,38 @@ func (s *Simulator) updateCurrentInstruction(instr Instruction) {
 	s.instr = instr
 }
 
-func listenOnPort(port int) bool {
-	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
-	if err != nil {
-		// we couldn't use this port, close the socket & try a new one
-		return false
+func listenOnPort(port int) func() error {
+	return func() error {
+		l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+		if err != nil {
+			// we couldn't use this port, close the socket & try a new one
+			return err
+		}
+		// success! we could listen on the port, which means we can use it!
+		// close the opened socket and return the port
+		l.Close()
+		return nil
 	}
-	// success! we could listen on the port, which means we can use it!
-	// close the opened socket and return the port
-	l.Close()
-	return true
 }
 
 func (s *Simulator) acquirePort() int {
 	maxAttempts := 100
 	startPort := s.basePort + s.portCounter
+
 	for i := 0; i < maxAttempts; i = i + 2 {
 		port := s.basePort + s.portCounter
 		s.portCounter += 2
 		// try to acquire two sequential ports: one for muxrpc communication, the other for sbot's websockets support.
 		// websockets is currently not used by the netsim, but the port needs to be specified for the sbots process
-		if listenOnPort(port) && listenOnPort(port+1) {
-			// if we could acquire the two ports, we're done! we have found two usable ports for one of our puppets
-			return port
+		g := new(errgroup.Group)
+		g.Go(listenOnPort(port))
+		g.Go(listenOnPort(port + 1))
+		err := g.Wait()
+		if err != nil {
+			continue
 		}
+		// if we could acquire the two ports, we're done! we have found two usable ports for one of our puppets
+		return port
 	}
 	log.Fatalf("Could not find any connectable ports in the range [%d, %d]", startPort, startPort+maxAttempts)
 	return -1
@@ -183,6 +222,15 @@ func (s Simulator) execute() {
 	var sleeper Sleeper
 	start := time.Now()
 	for _, instr := range s.instructions {
+		// check if we have received any cancellations before continuing on to process test commands
+		select {
+		case <-s.rootCtx.Done():
+			taplog("Context canceled, stopping execution")
+			return
+		default:
+			// keep running
+		}
+
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
 		case "start":
@@ -196,7 +244,7 @@ func (s Simulator) execute() {
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := filepath.Join(s.puppetDir, subfolder)
 			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
-			go startPuppet(s, p, langImpl)
+			go p.start(s, langImpl)
 			sleeper.sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
 			if err != nil {
@@ -208,6 +256,18 @@ func (s Simulator) execute() {
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
+		case "stop":
+			name := instr.args[0]
+			p, ok := s.puppetMap[name]
+			if !ok {
+				err := errors.New(fmt.Sprintf("no puppet named %s currently running", name))
+				instr.TestFailure(err)
+				continue
+			}
+			p.stop()
+			delete(s.puppetMap, name)
+			instr.TestSuccess()
+			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
 			srcPuppet := s.getSrcPuppet()
 			amount, err := strconv.Atoi(instr.getSecond())
@@ -264,7 +324,9 @@ func (s Simulator) execute() {
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
-			instr.Print()
+			// unknown command, abort test run
+			instr.TestAbort(errors.New("Unknown simulator command"))
+			s.exit()
 		}
 	}
 
@@ -306,6 +368,22 @@ func preparePuppetDir(dir string) string {
 	return absdir
 }
 
+func (s Simulator) monitorInterrupts() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-c
+		taplog(fmt.Sprintf("received shutdown signal, shutting down (signal %s)\n", sig.String()))
+		s.cancelExecution()
+	}()
+}
+
+func (s Simulator) exit() {
+	taplog("Closing all puppets")
+	s.cancelExecution()
+	time.Sleep(1 * time.Second)
+}
+
 func main() {
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
@@ -329,9 +407,16 @@ func main() {
 	 *   an output directory containing all puppet folders
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
+
 	outdir = preparePuppetDir(outdir)
 	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
+	// monitor system interrupts via cmd-c/mod-c
+	sim.monitorInterrupts()
+
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()
+
+	// once we are done we want all puppets to exit
+	sim.exit()
 }

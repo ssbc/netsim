@@ -14,8 +14,8 @@ func trimFeedId(feedID string) string {
 }
 
 func multiserverAddr(p Puppet) string {
-	// format: net:192.168.88.18:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
-	ip := "192.168.88.18"
+	// format: net:localhost:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
+	ip := "localhost"
 	return fmt.Sprintf("net:%s:%d~shs:%s", ip, p.Port, trimFeedId(p.feedID))
 }
 
