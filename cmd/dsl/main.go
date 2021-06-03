@@ -36,6 +36,8 @@ type Puppet struct {
 	directory string
 	feedID    string
 	name      string
+	caps      string
+	hops      int
 	seqno     int64
 
 	stopProcess context.CancelFunc
@@ -67,6 +69,11 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 	shimPath := filepath.Join(s.implementations[shim], "sim-shim.sh")
 	cmd = exec.CommandContext(ctx, shimPath, p.directory, strconv.Itoa(p.Port))
+	// the environment variables CAPS and HOPS contains the caps (default: ssb caps) and hops (default: 2) settings for
+	// the puppet, and must be set correctly in each implementation's sim-shim.sh
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("CAPS=%s", p.caps),
+		fmt.Sprintf("HOPS=%d", p.hops))
 	cmd.Stderr = writer
 	cmd.Stdout = writer
 	err = cmd.Run()
@@ -93,10 +100,12 @@ func (t TestError) Error() string {
 type Simulator struct {
 	puppetMap       map[string]Puppet
 	puppetDir       string
+	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
 	portCounter     int
 	instr           Instruction
 	instructions    []Instruction
 	basePort        int
+	hops            int
 	implementations map[string]string
 	verbose         bool
 
@@ -104,7 +113,7 @@ type Simulator struct {
 	cancelExecution context.CancelFunc
 }
 
-func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool) Simulator {
+func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
 
@@ -126,8 +135,10 @@ func makeSimulator(basePort int, puppetDir string, sbots []string, verbose bool)
 	sim := Simulator{
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
+		caps:            caps,
 		implementations: langMap,
 		basePort:        basePort,
+		hops:            hops,
 		verbose:         verbose,
 	}
 
@@ -243,7 +254,14 @@ func (s Simulator) execute() {
 			}
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := filepath.Join(s.puppetDir, subfolder)
-			p := Puppet{name: name, directory: fullpath, Port: s.acquirePort()}
+			// ? TODO: make sim's caps, hops overridable with puppet presets via commands like `caps <name>` `hops <name>`
+			p := Puppet{
+				name:      name,
+				directory: fullpath,
+				Port:      s.acquirePort(),
+				caps:      s.caps,
+				hops:      s.hops,
+			}
 			go p.start(s, langImpl)
 			sleeper.sleep(1 * time.Second)
 			feedID, err := DoWhoami(p)
@@ -384,7 +402,13 @@ func (s Simulator) exit() {
 	time.Sleep(1 * time.Second)
 }
 
+const defaultShsCaps = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
+
 func main() {
+	var caps string
+	flag.StringVar(&caps, "caps", defaultShsCaps, "the secret handshake capability key")
+	var hops int
+	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
 	var outdir string
@@ -409,7 +433,7 @@ func main() {
 	 */
 
 	outdir = preparePuppetDir(outdir)
-	sim := makeSimulator(basePort, outdir, flag.Args(), verbose)
+	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose)
 	// monitor system interrupts via cmd-c/mod-c
 	sim.monitorInterrupts()
 
