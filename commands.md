@@ -42,6 +42,10 @@ block <name1> <name2>
 isblocked <name1> <name2>
 isnotblocked <name1> <name2>
 hasnot <name1> <name2>@<latest||seqno>
+// advanced per-puppet settings; 
+// introduces side effects when e.g. stopping then starting a puppet again
+hops <name> <number>    // should be called before starting a peer to have any effect
+caps <name> <string>    // should be called before starting a peer to have any effect
 // the following commands are to be used in combination with a fixtures folder, passed with the flag --fixtures <folder>
 setup <name> @<base64>.ed25519 <global truncate count>
 truncate <name1> <name2>@<new length>

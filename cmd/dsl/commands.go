@@ -16,7 +16,7 @@ import (
 )
 
 func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{}) error {
-	c, err := client.NewTCP(p.Port, fmt.Sprintf("%s/secret", p.directory))
+	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{})
 }
 
 func sourceRequest(p Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
-	c, err := client.NewTCP(p.Port, fmt.Sprintf("%s/secret", p.directory))
+	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return nil, nil, err
 	}

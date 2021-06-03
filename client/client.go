@@ -11,16 +11,14 @@ import (
 	"go.cryptoscope.co/secretstream"
 )
 
-const defaultShsCap = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
-
-func NewTCP(port int, secretPath string) (muxrpc.Endpoint, error) {
+func NewTCP(port int, capsKey, secretPath string) (muxrpc.Endpoint, error) {
 	kp, err := keys.LoadKeyPair(secretPath)
 	if err != nil {
 		return nil, err
 	}
 
 	// default app key for the secret-handshake connection
-	appkey, err := base64.StdEncoding.DecodeString(defaultShsCap)
+	appkey, err := base64.StdEncoding.DecodeString(capsKey)
 	if err != nil {
 		return nil, err
 	}
