@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -147,11 +148,11 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
-	return s.puppetMap[s.instr.getSrc()]
+	return s.getPuppet(s.instr.getSrc())
 }
 
 func (s Simulator) getDstPuppet() Puppet {
-	return s.puppetMap[s.instr.getDst()]
+	return s.getPuppet(s.instr.getDst())
 }
 
 func (s *Simulator) ParseTest(lines []string) {
@@ -244,6 +245,37 @@ func (s Simulator) execute() {
 
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
+		case "enter":
+			name := instr.args[0]
+			p := Puppet{
+				name: name,
+				caps: s.caps,
+				hops: s.hops,
+			}
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "hops":
+			name := instr.args[0]
+			hops, err := strconv.Atoi(instr.args[1])
+			if err != nil {
+				s.Abort(err)
+			}
+			p := s.getPuppet(name)
+			p.hops = hops
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "caps":
+			name := instr.args[0]
+			caps := instr.args[1]
+			// perform validation on caps
+			_, err := base64.StdEncoding.DecodeString(caps)
+			if err != nil {
+				s.Abort(err)
+			}
+			p := s.getPuppet(name)
+			p.caps = caps
+			s.puppetMap[name] = p
+			instr.TestSuccess()
 		case "start":
 			name := instr.args[0]
 			langImpl := instr.args[1]
@@ -252,18 +284,15 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
+			p := s.getPuppet(name)
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := filepath.Join(s.puppetDir, subfolder)
-			// ? TODO: make sim's caps, hops overridable with puppet presets via commands like `caps <name>` `hops <name>`
-			p := Puppet{
-				name:      name,
-				directory: fullpath,
-				Port:      s.acquirePort(),
-				caps:      s.caps,
-				hops:      s.hops,
-			}
+			p.Port = s.acquirePort()
+			p.directory = fullpath
+
 			go p.start(s, langImpl)
 			sleeper.sleep(1 * time.Second)
+
 			feedID, err := DoWhoami(p)
 			if err != nil {
 				instr.TestFailure(err)
@@ -271,19 +300,14 @@ func (s Simulator) execute() {
 			}
 			p.feedID = feedID
 			s.puppetMap[name] = p
+
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
 			name := instr.args[0]
-			p, ok := s.puppetMap[name]
-			if !ok {
-				err := errors.New(fmt.Sprintf("no puppet named %s currently running", name))
-				instr.TestFailure(err)
-				continue
-			}
+			p := s.getPuppet(name)
 			p.stop()
-			delete(s.puppetMap, name)
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
@@ -338,13 +362,12 @@ func (s Simulator) execute() {
 			arg := strings.Split(instr.getSecond(), "@")
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
-			dstPuppet := s.puppetMap[dst]
+			dstPuppet := s.getPuppet(dst)
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
 			// unknown command, abort test run
-			instr.TestAbort(errors.New("Unknown simulator command"))
-			s.exit()
+			s.Abort(errors.New("Unknown simulator command"))
 		}
 	}
 
@@ -360,6 +383,19 @@ func (s Simulator) execute() {
 	taplog(fmt.Sprintf("Puppet count: %d", len(s.puppetMap)))
 
 	fmt.Printf("1..%d\n", len(s.instructions))
+}
+
+func (s Simulator) Abort(err error) {
+	s.instr.TestAbort(err)
+	s.exit()
+}
+
+func (s Simulator) getPuppet(name string) Puppet {
+	p, exists := s.puppetMap[name]
+	if !exists {
+		s.Abort(errors.New(fmt.Sprintf("fatal: there is no puppet declared as %s\n# possible fix: add `enter %s` before other statements", name, name)))
+	}
+	return p
 }
 
 func preparePuppetDir(dir string) string {
@@ -418,6 +454,13 @@ func main() {
 	var verbose bool
 	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
 	flag.Parse()
+
+	// validate flag-passed caps key
+	_, err := base64.StdEncoding.DecodeString(caps)
+	if err != nil {
+		fmt.Printf("Bail out! --caps %s was not a valid base64 sequence\n", caps)
+		return
+	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
 	 * the puppet lives in another directory, which contains its secret.
