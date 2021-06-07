@@ -24,6 +24,7 @@ the network simulator commands when writing test files.
 enter <name>            // should be called before any other command dealing with the named peer
 hops <name> <number>    // should be called before starting a peer to have any effect
 caps <name> <string>    // should be called before starting a peer to have any effect
+load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>
 wait <milliseconds>
@@ -46,7 +47,6 @@ isblocked <name1> <name2>
 isnotblocked <name1> <name2>
 hasnot <name1> <name2>@<latest||seqno>
 // the following commands are to be used in combination with a fixtures folder, passed with the flag --fixtures <folder>
-load <name> @<base64>.ed25519
 truncate <name1> <name2>@<new length>
 ```
 

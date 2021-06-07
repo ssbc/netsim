@@ -33,13 +33,14 @@ type Latest struct {
 }
 
 type Puppet struct {
-	Port      int
-	directory string
-	feedID    string
-	name      string
-	caps      string
-	hops      int
-	seqno     int64
+	Port         int
+	directory    string
+	feedID       string
+	name         string
+	caps         string
+	hops         int
+	seqno        int64
+	usesFixtures bool
 
 	stopProcess context.CancelFunc
 }
@@ -75,6 +76,12 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("CAPS=%s", p.caps),
 		fmt.Sprintf("HOPS=%d", p.hops))
+
+	if s.fixtures != "" && p.usesFixtures {
+		cmd.Env = append(cmd.Env,
+			fmt.Sprintf("FIXTURES=%s", s.fixtures))
+	}
+
 	cmd.Stderr = writer
 	cmd.Stdout = writer
 	err = cmd.Run()
@@ -109,12 +116,13 @@ type Simulator struct {
 	hops            int
 	implementations map[string]string
 	verbose         bool
+	fixtures        string
 
 	rootCtx         context.Context
 	cancelExecution context.CancelFunc
 }
 
-func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool) Simulator {
+func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
 
@@ -141,6 +149,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		basePort:        basePort,
 		hops:            hops,
 		verbose:         verbose,
+		fixtures:        fixtures,
 	}
 
 	sim.rootCtx, sim.cancelExecution = context.WithCancel(context.Background())
@@ -254,11 +263,23 @@ func (s Simulator) execute() {
 			}
 			s.puppetMap[name] = p
 			instr.TestSuccess()
+		case "load":
+			if s.fixtures == "" {
+				s.Abort(errors.New("no fixtures provided with --fixtures, yet tried to load feed from log.offset"))
+				continue
+			}
+			name := instr.args[0]
+			id := instr.args[1]
+			p := s.getPuppet(name)
+			p.usesFixtures = true
+			p.feedID = id
+			s.puppetMap[name] = p
 		case "hops":
 			name := instr.args[0]
 			hops, err := strconv.Atoi(instr.args[1])
 			if err != nil {
 				s.Abort(err)
+				continue
 			}
 			p := s.getPuppet(name)
 			p.hops = hops
@@ -271,6 +292,7 @@ func (s Simulator) execute() {
 			_, err := base64.StdEncoding.DecodeString(caps)
 			if err != nil {
 				s.Abort(err)
+				continue
 			}
 			p := s.getPuppet(name)
 			p.caps = caps
@@ -293,16 +315,24 @@ func (s Simulator) execute() {
 			go p.start(s, langImpl)
 			sleeper.sleep(1 * time.Second)
 
-			feedID, err := DoWhoami(p)
-			if err != nil {
-				instr.TestFailure(err)
-				continue
+			// TODO: if fixture has been loaded for this peer, exit early & omit doing whoami to find out feedID
+			// (we already know its feed id) as there will be time required for the sbot to index the ingested log.offset, my
+			// current thought is to punt that concern to the test author by requiring a large enough `wait <name>` after
+			// starting a fixtures-loaded peer
+			//
+			// maybe later the wait command can be more intelligent and try the debouncing strategy cel mentioned
+			if p.feedID == "" {
+				feedID, err := DoWhoami(p)
+				if err != nil {
+					instr.TestFailure(err)
+					continue
+				}
+				p.feedID = feedID
 			}
-			p.feedID = feedID
 			s.puppetMap[name] = p
 
 			instr.TestSuccess()
-			taplog(fmt.Sprintf("%s has id %s", name, feedID))
+			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
 			name := instr.args[0]
@@ -368,6 +398,7 @@ func (s Simulator) execute() {
 		default:
 			// unknown command, abort test run
 			s.Abort(errors.New("Unknown simulator command"))
+			continue
 		}
 	}
 
@@ -445,6 +476,8 @@ func main() {
 	flag.StringVar(&caps, "caps", defaultShsCaps, "the secret handshake capability key")
 	var hops int
 	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
+	var fixturesDir string
+	flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
 	var outdir string
@@ -476,7 +509,7 @@ func main() {
 	 */
 
 	outdir = preparePuppetDir(outdir)
-	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose)
+	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose, fixturesDir)
 	// monitor system interrupts via cmd-c/mod-c
 	sim.monitorInterrupts()
 
