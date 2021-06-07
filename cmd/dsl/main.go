@@ -274,6 +274,7 @@ func (s Simulator) execute() {
 			p.usesFixtures = true
 			p.feedID = id
 			s.puppetMap[name] = p
+			instr.TestSuccess()
 		case "hops":
 			name := instr.args[0]
 			hops, err := strconv.Atoi(instr.args[1])
