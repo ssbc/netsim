@@ -81,7 +81,7 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 	if s.fixtures != "" && p.usesFixtures {
 		cmd.Env = append(cmd.Env,
-			fmt.Sprintf("FIXTURES=%s", filepath.Join(s.fixtures, filepath.Base(p.secretDir))))
+			fmt.Sprintf("FIXTURES=%s", filepath.Join(s.fixtures, p.secretDir)))
 	}
 
 	cmd.Stderr = writer
@@ -109,7 +109,7 @@ func (t TestError) Error() string {
 
 type Simulator struct {
 	puppetMap       map[string]Puppet
-	secrets         map[string]map[string]string
+	secrets         map[string]string
 	implementations map[string]string
 	puppetDir       string
 	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
@@ -125,6 +125,11 @@ type Simulator struct {
 	cancelExecution context.CancelFunc
 }
 
+func bail(msg string) {
+	fmt.Printf("Bail out! %s\n", msg)
+	os.Exit(1)
+}
+
 func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
@@ -132,8 +137,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 	for _, bot := range sbots {
 		botDir, err := filepath.Abs(bot)
 		if err != nil {
-			fmt.Println(err)
-			continue
+			bail(fmt.Sprintf("%v", err))
 		}
 		// index language implementations by the last folder name
 		langMap[filepath.Base(botDir)] = botDir
@@ -146,15 +150,13 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 
 	secrets, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
 	if err != nil {
-		fmt.Printf("Bail out! --fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures)
-		os.Exit(1)
+		bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
 		return Simulator{}
 	}
-	secretsMap := make(map[string]map[string]string)
+	secretsMap := make(map[string]string)
 	err = json.Unmarshal(secrets, &secretsMap)
 	if err != nil {
-		fmt.Printf("Bail out! %w", err)
-		os.Exit(1)
+		bail(fmt.Sprintf("%v", err))
 		return Simulator{}
 	}
 
@@ -175,12 +177,12 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 }
 
 func (s Simulator) getSecretDir(id string) string {
-	entry, has := s.secrets[id]
+	dir, has := s.secrets[id]
 	if !has {
 		s.Abort(errors.New(fmt.Sprintf("cannot find id %s when getting secret dir", id)))
 		return ""
 	}
-	return entry["secret"]
+	return dir
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -520,8 +522,7 @@ func main() {
 	// validate flag-passed caps key
 	_, err := base64.StdEncoding.DecodeString(caps)
 	if err != nil {
-		fmt.Printf("Bail out! --caps %s was not a valid base64 sequence\n", caps)
-		return
+		bail(fmt.Sprintf("--caps %s was not a valid base64 sequence\n", caps))
 	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
