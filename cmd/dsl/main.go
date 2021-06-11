@@ -19,30 +19,17 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	refs "go.mindeco.de/ssb-refs"
 )
 
-type Whoami struct {
-	ID refs.FeedRef
-}
-
-type Latest struct {
-	ID       string
-	Sequence int
-	TS       int
-}
-
 type Puppet struct {
-	Port         int
-	directory    string
-	feedID       string
-	name         string
-	caps         string
-	hops         int
-	seqno        int64
-	usesFixtures bool
-	secretDir    string
+	Port      int
+	directory string
+	feedID    string
+	name      string
+	caps      string
+	hops      int
+	seqno     int64
+	secretDir string
 
 	stopProcess context.CancelFunc
 }
@@ -70,16 +57,16 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
 	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
 	// e.g. reading the passed in ssb directory ($1) and port ($2)
-
 	shimPath := filepath.Join(s.implementations[shim], "sim-shim.sh")
 	cmd = exec.CommandContext(ctx, shimPath, p.directory, strconv.Itoa(p.Port))
+
 	// the environment variables CAPS and HOPS contains the caps (default: ssb caps) and hops (default: 2) settings for
 	// the puppet, and must be set correctly in each implementation's sim-shim.sh
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("CAPS=%s", p.caps),
 		fmt.Sprintf("HOPS=%d", p.hops))
 
-	if s.fixtures != "" && p.usesFixtures {
+	if s.fixtures != "" && p.usesFixtures() {
 		cmd.Env = append(cmd.Env,
 			fmt.Sprintf("FIXTURES=%s", filepath.Join(s.fixtures, p.secretDir)))
 	}
@@ -98,6 +85,10 @@ func (p Puppet) stop() {
 	p.stopProcess()
 }
 
+func (p Puppet) usesFixtures() bool {
+	return len(p.feedID) > 0 && len(p.secretDir) > 0
+}
+
 type TestError struct {
 	err     error
 	message string
@@ -109,7 +100,7 @@ func (t TestError) Error() string {
 
 type Simulator struct {
 	puppetMap       map[string]Puppet
-	secrets         map[string]string
+	secrets         map[string]string // tracks fixture-derived secrets
 	implementations map[string]string
 	puppetDir       string
 	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
@@ -133,6 +124,7 @@ func bail(msg string) {
 func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
+	secretsMap := make(map[string]string)
 
 	for _, bot := range sbots {
 		botDir, err := filepath.Abs(bot)
@@ -148,16 +140,18 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		log.Fatalln(err)
 	}
 
-	secrets, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
-	if err != nil {
-		bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
-		return Simulator{}
-	}
-	secretsMap := make(map[string]string)
-	err = json.Unmarshal(secrets, &secretsMap)
-	if err != nil {
-		bail(fmt.Sprintf("%v", err))
-		return Simulator{}
+	// if we're loading fixtures, parse the identity-to-secret-folders map `secret-ids.json` (see cmd/log-splicer for info)
+	if fixtures != "" {
+		secrets, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
+		if err != nil {
+			bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
+			return Simulator{}
+		}
+		err = json.Unmarshal(secrets, &secretsMap)
+		if err != nil {
+			bail(fmt.Sprintf("%v", err))
+			return Simulator{}
+		}
 	}
 
 	sim := Simulator{
@@ -300,7 +294,6 @@ func (s Simulator) execute() {
 			name := instr.args[0]
 			id := instr.args[1]
 			p := s.getPuppet(name)
-			p.usesFixtures = true
 			p.secretDir = s.getSecretDir(id)
 			p.feedID = id
 			s.puppetMap[name] = p
@@ -352,7 +345,7 @@ func (s Simulator) execute() {
 			// starting a fixtures-loaded peer
 			//
 			// maybe later the wait command can be more intelligent and try the debouncing strategy cel mentioned
-			if p.feedID == "" {
+			if !p.usesFixtures() {
 				feedID, err := DoWhoami(p)
 				if err != nil {
 					instr.TestFailure(err)
@@ -519,6 +512,11 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
 	flag.Parse()
 
+	if len(flag.Args()) == 0 {
+		PrintUsage()
+		bail("no language implementations were provided")
+	}
+
 	// validate flag-passed caps key
 	_, err := base64.StdEncoding.DecodeString(caps)
 	if err != nil {
@@ -549,4 +547,10 @@ func main() {
 
 	// once we are done we want all puppets to exit
 	sim.exit()
+}
+
+func PrintUsage() {
+	fmt.Println("netsim: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
 }
