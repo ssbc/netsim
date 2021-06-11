@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,6 +42,7 @@ type Puppet struct {
 	hops         int
 	seqno        int64
 	usesFixtures bool
+	secretDir    string
 
 	stopProcess context.CancelFunc
 }
@@ -79,7 +81,7 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 	if s.fixtures != "" && p.usesFixtures {
 		cmd.Env = append(cmd.Env,
-			fmt.Sprintf("FIXTURES=%s", s.fixtures))
+			fmt.Sprintf("FIXTURES=%s", filepath.Join(s.fixtures, filepath.Base(p.secretDir))))
 	}
 
 	cmd.Stderr = writer
@@ -107,6 +109,8 @@ func (t TestError) Error() string {
 
 type Simulator struct {
 	puppetMap       map[string]Puppet
+	secrets         map[string]map[string]string
+	implementations map[string]string
 	puppetDir       string
 	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
 	portCounter     int
@@ -114,7 +118,6 @@ type Simulator struct {
 	instructions    []Instruction
 	basePort        int
 	hops            int
-	implementations map[string]string
 	verbose         bool
 	fixtures        string
 
@@ -141,9 +144,24 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		log.Fatalln(err)
 	}
 
+	secrets, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
+	if err != nil {
+		fmt.Printf("Bail out! --fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures)
+		os.Exit(1)
+		return Simulator{}
+	}
+	secretsMap := make(map[string]map[string]string)
+	err = json.Unmarshal(secrets, &secretsMap)
+	if err != nil {
+		fmt.Printf("Bail out! %w", err)
+		os.Exit(1)
+		return Simulator{}
+	}
+
 	sim := Simulator{
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
+		secrets:         secretsMap,
 		caps:            caps,
 		implementations: langMap,
 		basePort:        basePort,
@@ -154,6 +172,15 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 
 	sim.rootCtx, sim.cancelExecution = context.WithCancel(context.Background())
 	return sim
+}
+
+func (s Simulator) getSecretDir(id string) string {
+	entry, has := s.secrets[id]
+	if !has {
+		s.Abort(errors.New(fmt.Sprintf("cannot find id %s when getting secret dir", id)))
+		return ""
+	}
+	return entry["secret"]
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -272,6 +299,7 @@ func (s Simulator) execute() {
 			id := instr.args[1]
 			p := s.getPuppet(name)
 			p.usesFixtures = true
+			p.secretDir = s.getSecretDir(id)
 			p.feedID = id
 			s.puppetMap[name] = p
 			instr.TestSuccess()
