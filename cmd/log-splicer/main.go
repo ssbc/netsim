@@ -26,61 +26,54 @@ func check(err error) {
 }
 
 type FeedInfo struct {
-	Secret string `json:"secret"`
-	id     string
-	log    margaret.Log
+	ID  string
+	log margaret.Log
 }
 
 func mapIdentitiesToSecrets(indir, outdir string) map[string]FeedInfo {
 	feeds := make(map[string]FeedInfo)
+	idsToFolders := make(map[string]string)
 	err := filepath.WalkDir(indir, func(path string, info fs.DirEntry, err error) error {
 		if info.IsDir() {
 			return nil
 		}
 		if strings.HasPrefix(info.Name(), "secret") {
-			file, err := os.Open(path)
+			b, err := os.ReadFile(path)
 			check(err)
-			b, err := io.ReadAll(file)
-			check(err)
-
-			foldername := fmt.Sprintf("puppet-%03d", len(feeds))
-			// save the final location for this identity's secret
-			v := FeedInfo{Secret: filepath.Join(foldername, "secret")}
 
 			// load the secret & pick out its feed id
-			var id struct {
-				ID string
-			}
-			err = json.Unmarshal(b, &id)
+			v := FeedInfo{}
+			err = json.Unmarshal(b, &v)
 			check(err)
-			v.id = id.ID
 
 			// prepare folder paths
-			dest := filepath.Join(outdir, foldername)
-			basedir := filepath.Join(dest, "flume")
+			foldername := fmt.Sprintf("puppet-%03d", len(feeds))
+			puppetdir := filepath.Join(outdir, foldername)
+			flumedir := filepath.Join(puppetdir, "flume")
+			logpath := filepath.Join(flumedir, "log.offset")
 			// create correct folder structure
-			err = os.MkdirAll(basedir, os.ModePerm)
+			err = os.MkdirAll(flumedir, os.ModePerm)
 			check(err)
-			// set log location
-			logdest := filepath.Join(basedir, "log.offset")
 
 			// open a margaret log for the specified output format (lfo)
-			v.log, err = openLog(logdest)
+			v.log, err = openLog(logpath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to create output log for %s: %s\n", v.Secret, err)
+				fmt.Fprintf(os.Stderr, "failed to create output log for %s: %s\n", v.ID, err)
 				os.Exit(1)
 			}
-			feeds[v.id] = v
+			feeds[v.ID] = v
+			// map id to the folder containing secret & log
+			idsToFolders[v.ID] = foldername
 			// copy the secret file to the prepared puppet folder
-			err = os.WriteFile(filepath.Join(dest, "secret"), b, 0600)
+			err = os.WriteFile(filepath.Join(puppetdir, "secret"), b, 0600)
 			check(err)
 		}
 		return nil
 	})
 	check(err)
-	// write a json blob mapping the folders to identities
+	// write a json blob mapping the identities to the folders containing their secret + log.offset
 	// (we cant use the pubkey ids as folder names since unix does not like base64's charset)
-	b, err := json.MarshalIndent(feeds, "", "  ")
+	b, err := json.MarshalIndent(idsToFolders, "", "  ")
 	check(err)
 	err = os.WriteFile(filepath.Join(outdir, "secret-ids.json"), b, 0644)
 	check(err)
