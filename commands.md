@@ -31,6 +31,7 @@ stop <name>
 wait <milliseconds>
 has <name1> <name2>@<latest||seqno>
 post <name>
+publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)
 follow <name1> <name2>
 unfollow <name1> <name2>
 isfollowing <name1> <name2>

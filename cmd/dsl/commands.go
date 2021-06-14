@@ -210,6 +210,11 @@ func DoPost(p Puppet) error {
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 
+func DoPublish(p Puppet, post map[string]interface{}) error {
+	var response string
+	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
+}
+
 func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
 	srcRef, err := refs.ParseFeedRef(srcPuppet.feedID)
 	if err != nil {

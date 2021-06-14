@@ -415,6 +415,12 @@ func (s Simulator) execute() {
 			srcPuppet := s.getSrcPuppet()
 			err := DoPost(srcPuppet)
 			s.evaluateRun(err)
+		case "publish":
+			postline := strings.Join(instr.args[1:], " ")
+			obj := parsePostLine(postline)
+			srcPuppet := s.getSrcPuppet()
+			err := DoPublish(srcPuppet, obj)
+			s.evaluateRun(err)
 		case "disconnect":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
