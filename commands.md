@@ -24,6 +24,7 @@ the network simulator commands when writing test files.
 enter <name>            // should be called before any other command dealing with the named peer
 hops <name> <number>    // should be called before starting a peer to have any effect
 caps <name> <string>    // should be called before starting a peer to have any effect
+nolog <name>            // should be called before starting a peer to have any effect (omits log.offset when loading identity from fixtures)
 load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>

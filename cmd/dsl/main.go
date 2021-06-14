@@ -22,14 +22,15 @@ import (
 )
 
 type Puppet struct {
-	Port      int
-	directory string
-	feedID    string
-	name      string
-	caps      string
-	hops      int
-	seqno     int64
-	secretDir string
+	Port       int
+	directory  string
+	feedID     string
+	name       string
+	caps       string
+	hops       int
+	seqno      int64
+	secretDir  string
+	omitOffset bool
 
 	stopProcess context.CancelFunc
 }
@@ -67,8 +68,14 @@ func (p *Puppet) start(s Simulator, shim string) error {
 		fmt.Sprintf("HOPS=%d", p.hops))
 
 	if s.fixtures != "" && p.usesFixtures() {
+		// pass in LOG_OFFSET and SECRET separately, to allow for using a secret w/ no log.offset.
+		// this allows us to simulate when a peer friend-restores their database using only their secret
 		cmd.Env = append(cmd.Env,
-			fmt.Sprintf("FIXTURES=%s", filepath.Join(s.fixtures, p.secretDir)))
+			fmt.Sprintf("SECRET=%s", filepath.Join(s.fixtures, p.secretDir, "secret")))
+		if !p.omitOffset {
+			cmd.Env = append(cmd.Env,
+				fmt.Sprintf("LOG_OFFSET=%s", filepath.Join(s.fixtures, p.secretDir, "flume", "log.offset")))
+		}
 	}
 
 	cmd.Stderr = writer
@@ -296,6 +303,12 @@ func (s Simulator) execute() {
 			p := s.getPuppet(name)
 			p.secretDir = s.getSecretDir(id)
 			p.feedID = id
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "nolog":
+			name := instr.args[0]
+			p := s.getPuppet(name)
+			p.omitOffset = true
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "hops":
