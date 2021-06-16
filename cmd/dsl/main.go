@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,13 +33,14 @@ type Latest struct {
 }
 
 type Puppet struct {
-	Port      int
-	directory string
-	feedID    string
-	name      string
-	caps      string
-	hops      int
-	seqno     int64
+	Port         int
+	directory    string
+	feedID       string
+	name         string
+	caps         string
+	hops         int
+	seqno        int64
+	usesFixtures bool
 
 	stopProcess context.CancelFunc
 }
@@ -74,6 +76,12 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("CAPS=%s", p.caps),
 		fmt.Sprintf("HOPS=%d", p.hops))
+
+	if s.fixtures != "" && p.usesFixtures {
+		cmd.Env = append(cmd.Env,
+			fmt.Sprintf("FIXTURES=%s", s.fixtures))
+	}
+
 	cmd.Stderr = writer
 	cmd.Stdout = writer
 	err = cmd.Run()
@@ -108,12 +116,13 @@ type Simulator struct {
 	hops            int
 	implementations map[string]string
 	verbose         bool
+	fixtures        string
 
 	rootCtx         context.Context
 	cancelExecution context.CancelFunc
 }
 
-func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool) Simulator {
+func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
 
@@ -140,6 +149,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		basePort:        basePort,
 		hops:            hops,
 		verbose:         verbose,
+		fixtures:        fixtures,
 	}
 
 	sim.rootCtx, sim.cancelExecution = context.WithCancel(context.Background())
@@ -147,11 +157,11 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
-	return s.puppetMap[s.instr.getSrc()]
+	return s.getPuppet(s.instr.getSrc())
 }
 
 func (s Simulator) getDstPuppet() Puppet {
-	return s.puppetMap[s.instr.getDst()]
+	return s.getPuppet(s.instr.getDst())
 }
 
 func (s *Simulator) ParseTest(lines []string) {
@@ -244,6 +254,51 @@ func (s Simulator) execute() {
 
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
+		case "enter":
+			name := instr.args[0]
+			p := Puppet{
+				name: name,
+				caps: s.caps,
+				hops: s.hops,
+			}
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "load":
+			if s.fixtures == "" {
+				s.Abort(errors.New("no fixtures provided with --fixtures, yet tried to load feed from log.offset"))
+				continue
+			}
+			name := instr.args[0]
+			id := instr.args[1]
+			p := s.getPuppet(name)
+			p.usesFixtures = true
+			p.feedID = id
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "hops":
+			name := instr.args[0]
+			hops, err := strconv.Atoi(instr.args[1])
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			p := s.getPuppet(name)
+			p.hops = hops
+			s.puppetMap[name] = p
+			instr.TestSuccess()
+		case "caps":
+			name := instr.args[0]
+			caps := instr.args[1]
+			// perform validation on caps
+			_, err := base64.StdEncoding.DecodeString(caps)
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			p := s.getPuppet(name)
+			p.caps = caps
+			s.puppetMap[name] = p
+			instr.TestSuccess()
 		case "start":
 			name := instr.args[0]
 			langImpl := instr.args[1]
@@ -252,38 +307,38 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
+			p := s.getPuppet(name)
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := filepath.Join(s.puppetDir, subfolder)
-			// ? TODO: make sim's caps, hops overridable with puppet presets via commands like `caps <name>` `hops <name>`
-			p := Puppet{
-				name:      name,
-				directory: fullpath,
-				Port:      s.acquirePort(),
-				caps:      s.caps,
-				hops:      s.hops,
-			}
+			p.Port = s.acquirePort()
+			p.directory = fullpath
+
 			go p.start(s, langImpl)
 			sleeper.sleep(1 * time.Second)
-			feedID, err := DoWhoami(p)
-			if err != nil {
-				instr.TestFailure(err)
-				continue
+
+			// TODO: if fixture has been loaded for this peer, exit early & omit doing whoami to find out feedID
+			// (we already know its feed id) as there will be time required for the sbot to index the ingested log.offset, my
+			// current thought is to punt that concern to the test author by requiring a large enough `wait <name>` after
+			// starting a fixtures-loaded peer
+			//
+			// maybe later the wait command can be more intelligent and try the debouncing strategy cel mentioned
+			if p.feedID == "" {
+				feedID, err := DoWhoami(p)
+				if err != nil {
+					instr.TestFailure(err)
+					continue
+				}
+				p.feedID = feedID
 			}
-			p.feedID = feedID
 			s.puppetMap[name] = p
+
 			instr.TestSuccess()
-			taplog(fmt.Sprintf("%s has id %s", name, feedID))
+			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
 			name := instr.args[0]
-			p, ok := s.puppetMap[name]
-			if !ok {
-				err := errors.New(fmt.Sprintf("no puppet named %s currently running", name))
-				instr.TestFailure(err)
-				continue
-			}
+			p := s.getPuppet(name)
 			p.stop()
-			delete(s.puppetMap, name)
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
@@ -338,13 +393,13 @@ func (s Simulator) execute() {
 			arg := strings.Split(instr.getSecond(), "@")
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
-			dstPuppet := s.puppetMap[dst]
+			dstPuppet := s.getPuppet(dst)
 			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
 			// unknown command, abort test run
-			instr.TestAbort(errors.New("Unknown simulator command"))
-			s.exit()
+			s.Abort(errors.New("Unknown simulator command"))
+			continue
 		}
 	}
 
@@ -360,6 +415,19 @@ func (s Simulator) execute() {
 	taplog(fmt.Sprintf("Puppet count: %d", len(s.puppetMap)))
 
 	fmt.Printf("1..%d\n", len(s.instructions))
+}
+
+func (s Simulator) Abort(err error) {
+	s.instr.TestAbort(err)
+	s.exit()
+}
+
+func (s Simulator) getPuppet(name string) Puppet {
+	p, exists := s.puppetMap[name]
+	if !exists {
+		s.Abort(errors.New(fmt.Sprintf("fatal: there is no puppet declared as %s\n# possible fix: add `enter %s` before other statements", name, name)))
+	}
+	return p
 }
 
 func preparePuppetDir(dir string) string {
@@ -409,6 +477,8 @@ func main() {
 	flag.StringVar(&caps, "caps", defaultShsCaps, "the secret handshake capability key")
 	var hops int
 	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
+	var fixturesDir string
+	flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
 	var testfile string
 	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
 	var outdir string
@@ -418,6 +488,13 @@ func main() {
 	var verbose bool
 	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
 	flag.Parse()
+
+	// validate flag-passed caps key
+	_, err := base64.StdEncoding.DecodeString(caps)
+	if err != nil {
+		fmt.Printf("Bail out! --caps %s was not a valid base64 sequence\n", caps)
+		return
+	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
 	 * the puppet lives in another directory, which contains its secret.
@@ -433,7 +510,7 @@ func main() {
 	 */
 
 	outdir = preparePuppetDir(outdir)
-	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose)
+	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose, fixturesDir)
 	// monitor system interrupts via cmd-c/mod-c
 	sim.monitorInterrupts()
 

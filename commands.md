@@ -21,6 +21,10 @@ the network simulator commands when writing test files.
 
 ## Implemented Commands
 ```
+enter <name>            // should be called before any other command dealing with the named peer
+hops <name> <number>    // should be called before starting a peer to have any effect
+caps <name> <string>    // should be called before starting a peer to have any effect
+load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>
 wait <milliseconds>
@@ -42,14 +46,9 @@ block <name1> <name2>
 isblocked <name1> <name2>
 isnotblocked <name1> <name2>
 hasnot <name1> <name2>@<latest||seqno>
-// advanced per-puppet settings; 
-// introduces side effects when e.g. stopping then starting a puppet again
-hops <name> <number>    // should be called before starting a peer to have any effect
-caps <name> <string>    // should be called before starting a peer to have any effect
 // the following commands are to be used in combination with a fixtures folder, passed with the flag --fixtures <folder>
-setup <name> @<base64>.ed25519 <global truncate count>
 truncate <name1> <name2>@<new length>
 ```
 
-The commands `setup` and `truncate` would be introduced if the simulator implements
+The commands `load` and `truncate` would be introduced if the simulator implements
 support for loading in [ssb-fixtures](https://github.com/ssb-ngi-pointer/ssb-fixtures) pre-generated offset files.
