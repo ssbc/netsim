@@ -30,7 +30,7 @@ type FeedInfo struct {
 	log margaret.Log
 }
 
-func mapIdentitiesToSecrets(indir, outdir string) map[string]FeedInfo {
+func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) map[string]FeedInfo {
 	feeds := make(map[string]FeedInfo)
 	idsToFolders := make(map[string]string)
 	err := filepath.WalkDir(indir, func(path string, info fs.DirEntry, err error) error {
@@ -54,6 +54,27 @@ func mapIdentitiesToSecrets(indir, outdir string) map[string]FeedInfo {
 			// create correct folder structure
 			err = os.MkdirAll(flumedir, os.ModePerm)
 			check(err)
+
+			// check if the output log exists
+			info, err := os.Stat(logpath)
+			if err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "failed to stat output log for %s: %s\n", v.ID, err)
+				os.Exit(1)
+			}
+			// the output log does exist
+			if err == nil && info.Size() > 0 {
+				// -prune was not passed; abort
+				if !removeExistingLogs {
+					fmt.Fprintf(os.Stderr, "err: output log already contains data. has the splicer already run?\nsplicer: use -prune to delete pre-existing logs\n")
+					os.Exit(1)
+				}
+				// if -prune flag passed -> remove the log before we use it
+				err = os.Remove(logpath)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to delete pre-existing output log %s\n", err)
+					os.Exit(1)
+				}
+			}
 
 			// open a margaret log for the specified output format (lfo)
 			v.log, err = openLog(logpath)
@@ -93,6 +114,8 @@ func main() {
 	flag.BoolVar(&verbose, "v", false, "verbose: talks a bit more than than the tool otherwise is inclined to do")
 	var dryRun bool
 	flag.BoolVar(&dryRun, "dry", false, "only output what it would do")
+	var prune bool
+	flag.BoolVar(&prune, "prune", false, "removes existing output logs before writing to them (if -prune omitted, the splicer will instead exit with an error)")
 	var limit int
 	flag.IntVar(&limit, "limit", -1, "how many entries to copy (defaults to unlimited)")
 	flag.Parse()
@@ -108,7 +131,7 @@ func main() {
 	if dryRun || verbose {
 		fmt.Fprintf(os.Stderr, "splicer: will read log.offset from %s and output to %s\n", logPaths[0], logPaths[1])
 		if dryRun {
-				return
+			return
 		}
 	}
 
@@ -123,7 +146,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to open input log %s: %s\n", logPaths[0], err)
 		os.Exit(1)
 	}
-	feeds := mapIdentitiesToSecrets(logPaths[0], logPaths[1])
+	feeds := mapIdentitiesToSecrets(logPaths[0], logPaths[1], prune)
 
 	if verbose {
 		fmt.Fprintf(os.Stderr, "fixture had %d feeds\n", len(feeds))
