@@ -105,9 +105,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if dryRun {
+	if dryRun || verbose {
 		fmt.Fprintf(os.Stderr, "splicer: will read log.offset from %s and output to %s\n", logPaths[0], logPaths[1])
-		return
+		if dryRun {
+				return
+		}
 	}
 
 	var (
