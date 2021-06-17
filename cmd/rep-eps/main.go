@@ -9,7 +9,7 @@ import (
 	// "strings"
 )
 
-const MAX_HOPS = 2
+const MAX_HOPS = 3
 
 func check(err error) {
 	if err != nil {
@@ -49,6 +49,21 @@ func populateHopsAt(count int, peers map[string]peer) {
 	}
 }
 
+// TODO: make sure there are no duplicates when collapsing the map
+// TODO: should we include hops[0]? i.e. the peer we are inspecting
+func collapse(peers map[string]peer) {
+	outputMap := make(map[string][]string)
+	for id, p := range peers {
+		for i := 0; i < MAX_HOPS; i++ {
+			outputMap[id] = append(outputMap[id], p.hops[i]...)
+		}
+	}
+	b, err := json.MarshalIndent(outputMap, "", "  ")
+	check(err)
+	err = os.WriteFile("./expectations.json", b, 0666)
+	check(err)
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("usage: expectations <path to fixtures folder>")
@@ -68,11 +83,12 @@ func main() {
 	peers := make(map[string]peer)
 	for id, relations := range v {
 		p := makePeer(id)
+		p.hops[0] = append(p.hops[0], id)
 		for relationId, status := range relations {
 			if followed, ok := status.(bool); ok {
 				// non-nil relations are followed if status is true
 				if followed {
-					p.hops[0] = append(p.hops[0], relationId)
+					p.hops[1] = append(p.hops[1], relationId)
 					// and blocked if false
 				} else {
 					p.blocked[relationId] = true
@@ -81,7 +97,11 @@ func main() {
 		}
 		peers[id] = p
 	}
-	for i := 1; i <= MAX_HOPS; i++ {
-		populateHopsAt(i, peers)
+
+	if MAX_HOPS >= 2 {
+		for i := 2; i <= MAX_HOPS; i++ {
+			populateHopsAt(i, peers)
+		}
 	}
+	collapse(peers)
 }
