@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.cryptoscope.co/luigi"
@@ -52,8 +53,19 @@ func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) (map[
 				return err
 			}
 
+			// write puppet names based on secret names, to preserve the implicit pareto distribution of post authors
+			// (authors with lower secret ids make more posts)
+			parts := strings.Split(info.Name(), "-")
+			// handle the case where first file is just called "secret"
+			if len(parts) == 1 {
+				parts = append(parts, "0")
+			}
+			n, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return err
+			}
+			foldername := fmt.Sprintf("puppet-%05d", n)
 			// prepare folder paths
-			foldername := fmt.Sprintf("puppet-%03d", len(feeds))
 			puppetdir := filepath.Join(outdir, foldername)
 			flumedir := filepath.Join(puppetdir, "flume")
 			logpath := filepath.Join(flumedir, "log.offset")
