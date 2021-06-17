@@ -5,11 +5,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,18 +19,20 @@ import (
 	"go.cryptoscope.co/margaret/legacyflumeoffset"
 )
 
-func check(err error) {
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
-
 type FeedInfo struct {
 	ID  string
 	log margaret.Log
 }
 
-func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) map[string]FeedInfo {
+func inform(e error, message string) error {
+	if len(e.Error()) > 0 {
+		return fmt.Errorf("%s (%s)", message, e)
+	}
+	// the receiver error had no useful info, don't include it in our informative error message
+	return fmt.Errorf("%s", message)
+}
+
+func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) (map[string]FeedInfo, error) {
 	feeds := make(map[string]FeedInfo)
 	idsToFolders := make(map[string]string)
 	err := filepath.WalkDir(indir, func(path string, info fs.DirEntry, err error) error {
@@ -39,12 +41,16 @@ func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) map[s
 		}
 		if strings.HasPrefix(info.Name(), "secret") {
 			b, err := os.ReadFile(path)
-			check(err)
+			if err != nil {
+				return err
+			}
 
 			// load the secret & pick out its feed id
 			v := FeedInfo{}
 			err = json.Unmarshal(b, &v)
-			check(err)
+			if err != nil {
+				return err
+			}
 
 			// prepare folder paths
 			foldername := fmt.Sprintf("puppet-%03d", len(feeds))
@@ -53,52 +59,58 @@ func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) map[s
 			logpath := filepath.Join(flumedir, "log.offset")
 			// create correct folder structure
 			err = os.MkdirAll(flumedir, os.ModePerm)
-			check(err)
+			if err != nil {
+				return err
+			}
 
 			// check if the output log exists
 			info, err := os.Stat(logpath)
 			if err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "failed to stat output log for %s: %s\n", v.ID, err)
-				os.Exit(1)
+				return inform(err, fmt.Sprintf("failed to stat output log for %s:", v.ID))
 			}
 			// the output log does exist
 			if err == nil && info.Size() > 0 {
 				// -prune was not passed; abort
 				if !removeExistingLogs {
-					fmt.Fprintf(os.Stderr, "err: output log already contains data. has the splicer already run?\nsplicer: use -prune to delete pre-existing logs\n")
-					os.Exit(1)
+					return inform(errors.New("-prune was not passed"), "output log already contains data. has the splicer already run?\nsplicer: use -prune to delete pre-existing logs")
 				}
 				// if -prune flag passed -> remove the log before we use it
 				err = os.Remove(logpath)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to delete pre-existing output log %s\n", err)
-					os.Exit(1)
+					return inform(err, "failed to delete pre-existing output log")
 				}
 			}
 
 			// open a margaret log for the specified output format (lfo)
 			v.log, err = openLog(logpath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to create output log for %s: %s\n", v.ID, err)
-				os.Exit(1)
+				inform(err, fmt.Sprintf("failed to create output log for %s", v.ID))
 			}
 			feeds[v.ID] = v
 			// map id to the folder containing secret & log
 			idsToFolders[v.ID] = foldername
 			// copy the secret file to the prepared puppet folder
 			err = os.WriteFile(filepath.Join(puppetdir, "secret"), b, 0600)
-			check(err)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
-	check(err)
+	if err != nil {
+		return nil, err
+	}
 	// write a json blob mapping the identities to the folders containing their secret + log.offset
 	// (we cant use the pubkey ids as folder names since unix does not like base64's charset)
 	b, err := json.MarshalIndent(idsToFolders, "", "  ")
-	check(err)
+	if err != nil {
+		return nil, err
+	}
 	err = os.WriteFile(filepath.Join(outdir, "secret-ids.json"), b, 0644)
-	check(err)
-	return feeds
+	if err != nil {
+		return nil, err
+	}
+	return feeds, nil
 }
 
 /*
@@ -146,7 +158,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to open input log %s: %s\n", logPaths[0], err)
 		os.Exit(1)
 	}
-	feeds := mapIdentitiesToSecrets(logPaths[0], logPaths[1], prune)
+	feeds, err := mapIdentitiesToSecrets(logPaths[0], logPaths[1], prune)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 
 	if verbose {
 		fmt.Fprintf(os.Stderr, "fixture had %d feeds\n", len(feeds))
