@@ -2,14 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path"
-	// "strings"
 )
-
-const MAX_HOPS = 3
 
 func check(err error) {
 	if err != nil {
@@ -64,11 +62,17 @@ func collapse(peers map[string]peer) {
 	check(err)
 }
 
+var MAX_HOPS int
+
 func main() {
-	if len(os.Args) < 2 {
+	flag.IntVar(&MAX_HOPS, "hops", 3, "the default global hops setting")
+	flag.Parse()
+
+	if len(flag.Args()) == 0 {
 		fmt.Println("usage: expectations <path to fixtures folder>")
 	}
-	graphpath := path.Join(os.Args[1], "follow-graph.json")
+
+	graphpath := path.Join(flag.Args()[0], "follow-graph.json")
 	b, err := os.ReadFile(graphpath)
 	check(err)
 
