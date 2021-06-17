@@ -47,15 +47,28 @@ func populateHopsAt(count int, peers map[string]peer) {
 	}
 }
 
-// TODO: make sure there are no duplicates when collapsing the map
 // TODO: should we include hops[0]? i.e. the peer we are inspecting
 func collapse(peers map[string]peer) {
-	outputMap := make(map[string][]string)
+	// prune out duplicates when collapsing the map
+	collapsedHops := make(map[string]map[string]bool)
 	for id, p := range peers {
-		for i := 0; i < MAX_HOPS; i++ {
-			outputMap[id] = append(outputMap[id], p.hops[i]...)
+		for i := 0; i <= MAX_HOPS; i++ {
+			collapsedHops[id] = make(map[string]bool)
+			for _, otherId := range p.hops[i] {
+				collapsedHops[id][otherId] = true
+			}
 		}
 	}
+
+	// massage deduplicated data into a nicer form for later use
+	outputMap := make(map[string][]string)
+	for id, others := range collapsedHops {
+		for otherId := range others {
+			outputMap[id] = append(outputMap[id], otherId)
+		}
+	}
+
+	// persist to disk
 	b, err := json.MarshalIndent(outputMap, "", "  ")
 	check(err)
 	err = os.WriteFile("./expectations.json", b, 0666)
