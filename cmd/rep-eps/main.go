@@ -38,7 +38,7 @@ func populateHopsAt(count int, peers map[string]peer) {
 			for _, hopsFollow := range friend.hops[count-1] {
 				// don't add blocked peers to hops
 				// TODO: toggle this behaviour with flag?
-				if _, exists := my.blocked[hopsFollow]; exists {
+				if _, exists := my.blocked[hopsFollow]; exists && !REPLICATE_BLOCKED {
 					continue
 				}
 				my.hops[count] = append(my.hops[count], hopsFollow)
@@ -76,9 +76,11 @@ func collapse(peers map[string]peer) {
 }
 
 var MAX_HOPS int
+var REPLICATE_BLOCKED bool
 
 func main() {
 	flag.IntVar(&MAX_HOPS, "hops", 3, "the default global hops setting")
+	flag.BoolVar(&REPLICATE_BLOCKED, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
