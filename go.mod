@@ -3,6 +3,8 @@ module github.com/ssb-ngi-pointer/netsim
 go 1.16
 
 require (
+	go.cryptoscope.co/luigi v0.3.6-0.20200131144242-3256b54e72c8
+	go.cryptoscope.co/margaret v0.2.1
 	go.cryptoscope.co/muxrpc/v2 v2.0.6
 	go.cryptoscope.co/netwrap v0.1.0
 	go.cryptoscope.co/nocomment v0.0.0-20210520094614-fb744e81f810
