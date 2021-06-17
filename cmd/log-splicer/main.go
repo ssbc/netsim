@@ -27,7 +27,7 @@ type FeedInfo struct {
 
 func inform(e error, message string) error {
 	if len(e.Error()) > 0 {
-		return fmt.Errorf("%s (%s)", message, e)
+		return fmt.Errorf("%s (%w)", message, e)
 	}
 	// the receiver error had no useful info, don't include it in our informative error message
 	return fmt.Errorf("%s", message)
