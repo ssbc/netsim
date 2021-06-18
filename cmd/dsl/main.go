@@ -181,7 +181,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 func (s Simulator) getSecretDir(id string) string {
 	dir, has := s.idFolders[id]
 	if !has {
-		s.Abort(errors.New(fmt.Sprintf("cannot find id %s when getting secret dir", id)))
+		s.Abort(fmt.Errorf("cannot find id %s when getting secret dir", id))
 		return ""
 	}
 	return dir
