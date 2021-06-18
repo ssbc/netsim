@@ -1,8 +1,9 @@
 package parser
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type variant struct {
@@ -13,36 +14,39 @@ type variant struct {
 func TestParsing(t *testing.T) {
 	a := assert.New(t)
 
-	cases := make([]variant, 0)
-	cases = append(cases, easyVariant())
-	cases = append(cases, nestedVariant())
+	var cases []variant
+	cases = append(cases, easyVariant)
+	cases = append(cases, nestedVariant)
+	cases = append(cases, brokenVariant1)
+	// cases = append(cases, brokenVariant2)
 
 	for _, v := range cases {
 		res := ParsePostLine(v.input)
-		a.Equal(res, v.output)
+		a.Equal(v.output, res)
 	}
 }
 
-func easyVariant() variant {
-	return variant{
-		input: "(type post) (text hello) (channel ssb-help)",
-		output: map[string]interface{}{
-			"type":    "post",
-			"channel": "ssb-help",
-			"text":    "hello",
-		},
-	}
+var easyVariant = variant{
+	input: "(type post) (text hello) (channel ssb-help)",
+	output: map[string]interface{}{
+		"type":    "post",
+		"channel": "ssb-help",
+		"text":    "hello",
+	},
 }
 
-func nestedVariant() variant {
-	return variant{
-		input: "(type post) (value.content hello) (channel ssb-help)",
-		output: map[string]interface{}{
-			"type":    "post",
-			"channel": "ssb-help",
-			"value": map[string]interface{}{
-				"content": "hello",
-			},
+var nestedVariant = variant{
+	input: "(type post) (value.content hello) (channel ssb-help)",
+	output: map[string]interface{}{
+		"type":    "post",
+		"channel": "ssb-help",
+		"value": map[string]interface{}{
+			"content": "hello",
 		},
-	}
+	},
+}
+
+var brokenVariant1 = variant{
+	input:  "(what) (if)",
+	output: map[string]interface{}{},
 }
