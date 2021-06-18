@@ -24,12 +24,14 @@ the network simulator commands when writing test files.
 enter <name>            // should be called before any other command dealing with the named peer
 hops <name> <number>    // should be called before starting a peer to have any effect
 caps <name> <string>    // should be called before starting a peer to have any effect
+skipoffset <name>       // should be called before starting a peer to have any effect (omits copying over log.offset when loading identity from fixtures)
 load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>
 wait <milliseconds>
 has <name1> <name2>@<latest||seqno>
 post <name>
+publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)
 follow <name1> <name2>
 unfollow <name1> <name2>
 isfollowing <name1> <name2>

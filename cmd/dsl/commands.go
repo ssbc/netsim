@@ -15,6 +15,16 @@ import (
 	"github.com/ssb-ngi-pointer/netsim/client"
 )
 
+type Whoami struct {
+	ID refs.FeedRef
+}
+
+type Latest struct {
+	ID       string
+	Sequence int
+	TS       int
+}
+
 func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{}) error {
 	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
@@ -196,6 +206,11 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 func DoPost(p Puppet) error {
 	post := refs.NewPost("bep")
 
+	var response string
+	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
+}
+
+func DoPublish(p Puppet, post map[string]interface{}) error {
 	var response string
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }

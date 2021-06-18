@@ -3,6 +3,7 @@ module github.com/ssb-ngi-pointer/netsim
 go 1.16
 
 require (
+	github.com/stretchr/testify v1.7.0 // indirect
 	go.cryptoscope.co/luigi v0.3.6-0.20200131144242-3256b54e72c8
 	go.cryptoscope.co/margaret v0.2.1
 	go.cryptoscope.co/muxrpc/v2 v2.0.6
