@@ -14,11 +14,12 @@ type variant struct {
 func TestParsing(t *testing.T) {
 	a := assert.New(t)
 
-	var cases []variant
-	cases = append(cases, easyVariant)
-	cases = append(cases, nestedVariant)
-	cases = append(cases, brokenVariant1)
-	// cases = append(cases, brokenVariant2)
+	var cases = []variant{
+		easyVariant,
+		nestedVariant,
+		brokenVariant1,
+		// brokenVariant2,
+	}
 
 	for _, v := range cases {
 		res := ParsePostLine(v.input)
