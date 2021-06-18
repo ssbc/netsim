@@ -306,7 +306,7 @@ func (s Simulator) execute() {
 			p.feedID = id
 			s.puppetMap[name] = p
 			instr.TestSuccess()
-		case "nolog":
+		case "skipoffset":
 			name := instr.args[0]
 			p := s.getPuppet(name)
 			p.omitOffset = true
