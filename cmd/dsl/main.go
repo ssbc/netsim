@@ -108,7 +108,7 @@ func (t TestError) Error() string {
 
 type Simulator struct {
 	puppetMap       map[string]Puppet
-	secrets         map[string]string // tracks fixture-derived secrets
+	idFolders       map[string]string // map of [pubkey: <--fixtures folder containing secret for pubkey>]
 	implementations map[string]string
 	puppetDir       string
 	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
@@ -132,7 +132,7 @@ func bail(msg string) {
 func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
-	secretsMap := make(map[string]string)
+	idFoldersMap := make(map[string]string)
 
 	for _, bot := range sbots {
 		botDir, err := filepath.Abs(bot)
@@ -150,12 +150,12 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 
 	// if we're loading fixtures, parse the identity-to-secret-folders map `secret-ids.json` (see cmd/log-splicer for info)
 	if fixtures != "" {
-		secrets, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
+		idFolders, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
 		if err != nil {
 			bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
 			return Simulator{}
 		}
-		err = json.Unmarshal(secrets, &secretsMap)
+		err = json.Unmarshal(idFolders, &idFoldersMap)
 		if err != nil {
 			bail(fmt.Sprintf("%v", err))
 			return Simulator{}
@@ -165,7 +165,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 	sim := Simulator{
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
-		secrets:         secretsMap,
+		idFolders:       idFoldersMap,
 		caps:            caps,
 		implementations: langMap,
 		basePort:        basePort,
@@ -179,7 +179,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 }
 
 func (s Simulator) getSecretDir(id string) string {
-	dir, has := s.secrets[id]
+	dir, has := s.idFolders[id]
 	if !has {
 		s.Abort(errors.New(fmt.Sprintf("cannot find id %s when getting secret dir", id)))
 		return ""
