@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ssb-ngi-pointer/netsim/internal/parser"
 	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
@@ -417,7 +418,7 @@ func (s Simulator) execute() {
 			s.evaluateRun(err)
 		case "publish":
 			postline := strings.Join(instr.args[1:], " ")
-			obj := parsePostLine(postline)
+			obj := parser.ParsePostLine(postline)
 			srcPuppet := s.getSrcPuppet()
 			err := DoPublish(srcPuppet, obj)
 			s.evaluateRun(err)
