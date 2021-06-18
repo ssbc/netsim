@@ -8,7 +8,7 @@ import (
 )
 
 // matches (type post) (value.content hello) (channel ssb-help)
-var postPattern = regexp.MustCompile(`\((\S+)\s(.*?)\)`)
+var postPattern = regexp.MustCompile(`\((\S+)\s([^()]+?)\)`)
 
 /* TODO:
 * implement number parsing (strconv attempt), boolean parsing (if true|false => bool it up)

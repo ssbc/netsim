@@ -17,8 +17,8 @@ func TestParsing(t *testing.T) {
 	var cases = []variant{
 		easyVariant,
 		nestedVariant,
-		brokenVariant1,
-		// brokenVariant2,
+		disallowedVariant1,
+		// disallowedVariant2,
 	}
 
 	for _, v := range cases {
@@ -47,7 +47,7 @@ var nestedVariant = variant{
 	},
 }
 
-var brokenVariant1 = variant{
-	input:  "(what) (if)",
+var disallowedVariant1 = variant{
+	input:  "(what) (if) (beep)",
 	output: map[string]interface{}{},
 }
