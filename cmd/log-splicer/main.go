@@ -6,6 +6,17 @@
 // * Copies secrets from the fixtures folder to each identity folder
 // * Splics out messages from the one ssb-fixtures log.offset to the many log.offset in said folder structure
 // * Persists an identity mapping of ID to {folderName, latest sequence number} to secret-ids.json
+
+// The log splicer command takes an ssb-fixtures generated folder as input, and a destination folder as output. The
+// destination folder will be populated with identity folders, one folder per identity found in the generated fixtures.
+//
+// Each identity folder contains a log.offset, with the posts created by that identity, and the identity's secret file. The
+// identity folders are named after the filenames of the secrets found in the ssb-fixtures folder, which preserves the
+// pareto distribution of authors (secrets in the lower number ranges have issued more posts).
+//
+// Finally, a mapping from ssb identities @[...].ed25199 to the identity folders is dumped as json to the root of the
+// destination folder. The mapping, in addition to naming the secret folder, also contains an integer count tracking the latest
+// sequence number posted by that identity.
 package main
 
 import (
@@ -26,7 +37,6 @@ import (
 	"go.cryptoscope.co/margaret/legacyflumeoffset"
 )
 
-// TODO: collapse feedinfo + feedjson into just feedinfo? and use temp struct for unmarshaling ID?
 type FeedInfo struct {
 	ID             string
 	log            margaret.Log
@@ -159,7 +169,8 @@ func checkLogEmpty(logpath string, removeExistingLogs bool) error {
 	if err == nil && info.Size() > 0 {
 		// -prune was not passed; abort
 		if !removeExistingLogs {
-			return inform(errors.New("-prune was not passed"), "output log already contains data. has the splicer already run?\nsplicer: use -prune to delete pre-existing logs")
+			msg := fmt.Sprintf("output log already contains data. has the splicer already run?\n%s: use -prune to delete pre-existing logs", getToolName())
+			return inform(errors.New("-prune was not passed"), msg)
 		}
 		// if -prune flag passed -> remove the log before we use it
 		err = os.Remove(logpath)
@@ -178,7 +189,8 @@ func checkLogEmpty(logpath string, removeExistingLogs bool) error {
 * 4. finally, create folders for each author, using the author's pubkey as directory name, and dump an lfo
 * version of their log.offset representation. inside each folder, dump the correct secret as well
  */
-func main() {
+
+func spliceLogs() error {
 	var verbose bool
 	flag.BoolVar(&verbose, "v", false, "verbose: talks a bit more than than the tool otherwise is inclined to do")
 	var dryRun bool
@@ -189,37 +201,34 @@ func main() {
 	flag.IntVar(&limit, "limit", -1, "how many entries to copy (defaults to unlimited)")
 	flag.Parse()
 
+	var err error
+	var input margaret.Log
+
 	logpaths := flag.Args()
 	if len(logpaths) != 2 {
 		cmdName := os.Args[0]
-		fmt.Fprintf(os.Stderr, "Usage: %s <options> <path to ssb-fixtures folder> <output path>\nOptions:\n", cmdName)
+		err := fmt.Errorf("Usage: %s <options> <path to ssb-fixtures folder> <output path>\nOptions:\n", cmdName)
 		flag.PrintDefaults()
-		os.Exit(1)
+		return err
 	}
 	indir, outdir := logpaths[0], logpaths[1]
 
 	if dryRun || verbose {
-		fmt.Fprintf(os.Stderr, "splicer: will read log.offset from %s and output to %s\n", indir, outdir)
+		fmt.Fprintf(os.Stderr, "%s: will read log.offset from %s and output to %s\n", getToolName(), indir, outdir)
 		if dryRun {
-			return
+			return nil
 		}
 	}
-
-	var (
-		err   error
-		input margaret.Log
-	)
 
 	sourceFile := filepath.Join(indir, "flume", "log.offset")
 	input, err = openLog(sourceFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open input log %s: %s\n", indir, err)
-		os.Exit(1)
+		return fmt.Errorf("failed to open input log %s: %w\n", indir, err)
 	}
+
 	feeds, err := mapIdentitiesToSecrets(indir, outdir, prune)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	if verbose {
@@ -228,8 +237,7 @@ func main() {
 
 	src, err := input.Query(margaret.Limit(limit))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create query on input log %s: %s\n", indir, err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create query on input log %s: %w\n", indir, err)
 	}
 
 	i := 0
@@ -240,8 +248,7 @@ func main() {
 			if luigi.IsEOS(err) {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "failed to get log entry %s: %s\n", indir, err)
-			os.Exit(1)
+			return fmt.Errorf("failed to get log entry %s: %w\n", indir, err)
 		}
 
 		msg := v.(lfoMessage)
@@ -255,16 +262,14 @@ func main() {
 
 		_, err = a.log.Append(v)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to write entry to output log %s: %s\n", outdir, err)
-			os.Exit(1)
+			return fmt.Errorf("failed to write entry to output log %s: %w\n", outdir, err)
 		}
 		i++
 	}
 
 	err = persistIdentityMapping(feeds, outdir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	if verbose {
@@ -274,10 +279,23 @@ func main() {
 	for _, a := range feeds {
 		if c, ok := a.log.(io.Closer); ok {
 			if err = c.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to close output log %s: %s\n", outdir, err)
+				return fmt.Errorf("failed to close output log %s: %w\n", outdir, err)
 			}
 		}
 	}
+	return nil
+}
+
+func main() {
+	err := spliceLogs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", getToolName(), err)
+		os.Exit(1)
+	}
+}
+
+func getToolName() string {
+	return os.Args[0]
 }
 
 func openLog(path string) (margaret.Log, error) {
