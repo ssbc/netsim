@@ -190,16 +190,7 @@ func checkLogEmpty(logpath string, removeExistingLogs bool) error {
 * version of their log.offset representation. inside each folder, dump the correct secret as well
  */
 
-func spliceLogs() error {
-	var verbose bool
-	flag.BoolVar(&verbose, "v", false, "verbose: talks a bit more than than the tool otherwise is inclined to do")
-	var dryRun bool
-	flag.BoolVar(&dryRun, "dry", false, "only output what it would do")
-	var prune bool
-	flag.BoolVar(&prune, "prune", false, "removes existing output logs before writing to them (if -prune omitted, the splicer will instead exit with an error)")
-	var limit int
-	flag.IntVar(&limit, "limit", -1, "how many entries to copy (defaults to unlimited)")
-	flag.Parse()
+func spliceLogs(args runtimeArgs) error {
 
 	var err error
 	var input margaret.Log
@@ -213,9 +204,9 @@ func spliceLogs() error {
 	}
 	indir, outdir := logpaths[0], logpaths[1]
 
-	if dryRun || verbose {
+	if args.dryRun || args.verbose {
 		fmt.Fprintf(os.Stderr, "%s: will read log.offset from %s and output to %s\n", getToolName(), indir, outdir)
-		if dryRun {
+		if args.dryRun {
 			return nil
 		}
 	}
@@ -226,16 +217,16 @@ func spliceLogs() error {
 		return fmt.Errorf("failed to open input log %s: %w\n", indir, err)
 	}
 
-	feeds, err := mapIdentitiesToSecrets(indir, outdir, prune)
+	feeds, err := mapIdentitiesToSecrets(indir, outdir, args.prune)
 	if err != nil {
 		return err
 	}
 
-	if verbose {
+	if args.verbose {
 		fmt.Fprintf(os.Stderr, "fixture had %d feeds\n", len(feeds))
 	}
 
-	src, err := input.Query(margaret.Limit(limit))
+	src, err := input.Query(margaret.Limit(args.limit))
 	if err != nil {
 		return fmt.Errorf("failed to create query on input log %s: %w\n", indir, err)
 	}
@@ -272,7 +263,7 @@ func spliceLogs() error {
 		return err
 	}
 
-	if verbose {
+	if args.verbose {
 		fmt.Fprintln(os.Stderr, "all done. closing output log. Copied:", i)
 	}
 
@@ -286,8 +277,21 @@ func spliceLogs() error {
 	return nil
 }
 
+type runtimeArgs struct {
+	verbose bool
+	dryRun  bool
+	prune   bool
+	limit   int
+}
+
 func main() {
-	err := spliceLogs()
+	args := runtimeArgs{}
+	flag.BoolVar(&args.verbose, "v", false, "verbose: talks a bit more than than the tool otherwise is inclined to do")
+	flag.BoolVar(&args.dryRun, "dry", false, "only output what it would do")
+	flag.BoolVar(&args.prune, "prune", false, "removes existing output logs before writing to them (if -prune omitted, the splicer will instead exit with an error)")
+	flag.IntVar(&args.limit, "limit", -1, "how many entries to copy (defaults to unlimited)")
+	flag.Parse()
+	err := spliceLogs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", getToolName(), err)
 		os.Exit(1)
