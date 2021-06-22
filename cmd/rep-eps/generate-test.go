@@ -1,3 +1,5 @@
+// Generates a full netsim test, given a log-splicer processed ssb-fixtures folder and a replication expectations file
+// expectations.json.
 package main
 
 import (
@@ -63,8 +65,9 @@ func getUniques(expectations map[string][]string) []string {
 }
 
 const MAX_COUNT = 4
-const WAIT_DURATION = 3000
+const WAIT_DURATION = 2000
 const BATCH_SIZE = 3
+const SSB_SERVER = "ssb-server-REPLACEME"
 
 // uses:
 // * expectations.json
@@ -75,6 +78,7 @@ func main() {
 	var expectationsPath string
 	flag.StringVar(&expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
 	flag.Parse()
+
 	expectations, err := readExpectations(expectationsPath)
 	check(err)
 
@@ -112,6 +116,7 @@ func main() {
 		focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
 	// deterministically shuffle the focus group
+	// TODO: accept --seed flag to change shuffling
 	rand.Shuffle(len(focusGroup), func(i, j int) {
 		focusGroup[i], focusGroup[j] = focusGroup[j], focusGroup[i]
 	})
@@ -144,7 +149,7 @@ func main() {
 	}
 
 	stop(focusGroup)
-	fmt.Printf("total time: %d seconds", totalTime/1000)
+	fmt.Printf("\ntotal time: %d seconds\n", totalTime/1000)
 }
 
 // batching logic for connections from each focused puppet to their expected replicatees
@@ -152,6 +157,7 @@ func batchConnect(issuer string, replicateeNames []string) {
 	var count int
 	var finished bool
 	var endRange int
+
 	for {
 		startRange := count * BATCH_SIZE
 		endRange = (count + 1) * BATCH_SIZE
@@ -159,6 +165,7 @@ func batchConnect(issuer string, replicateeNames []string) {
 			endRange = len(replicateeNames)
 			finished = true
 		}
+
 		subset := replicateeNames[startRange:endRange]
 
 		start(subset)
@@ -166,8 +173,9 @@ func batchConnect(issuer string, replicateeNames []string) {
 		wait()
 
 		disconnect(issuer, subset)
-		stop(subset)
 		wait()
+		stop(subset)
+
 		if finished {
 			break
 		}
@@ -195,7 +203,7 @@ func connect(issuer string, names []string) {
 
 func start(names []string) {
 	for _, name := range names {
-		fmt.Printf("start %s\n", name)
+		fmt.Printf("start %s %s\n", name, SSB_SERVER)
 	}
 }
 

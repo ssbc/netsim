@@ -11,6 +11,7 @@ require (
 	go.cryptoscope.co/nocomment v0.0.0-20210520094614-fb744e81f810
 	go.cryptoscope.co/secretstream v1.2.3
 	go.mindeco.de/ssb-refs v0.2.0
+	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 

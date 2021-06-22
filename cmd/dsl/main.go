@@ -201,6 +201,10 @@ func (s *Simulator) ParseTest(lines []string) {
 		fmt.Println("## Start test file")
 	}
 	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			s.Abort(fmt.Errorf("line %d was empty; empty lines are not allowed", i+1))
+			return
+		}
 		instr := parseTestLine(line, i+1)
 		if s.verbose {
 			instr.Print()
