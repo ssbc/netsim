@@ -32,17 +32,27 @@ func readExpectations(expectationsPath string) (map[string][]string, error) {
 	return v, nil
 }
 
+func pickName(splicedFixturesMap map[string]interface{}) string {
+	return splicedFixturesMap["folder"].(string)
+}
+
 func getIdentities(fixturesRoot string) (map[string]string, error) {
 	b, err := os.ReadFile(path.Join(fixturesRoot, "secret-ids.json"))
 	if err != nil {
 		return nil, err
 	}
-	var v map[string]string
+	// secret-ids.json contains a map of ids -> {latest, folder}
+	var v map[string]map[string]interface{}
 	err = json.Unmarshal(b, &v)
 	if err != nil {
 		return nil, err
 	}
-	return v, nil
+	identities := make(map[string]string)
+	// however, we only want a mapping from id->foldername, so let's get that
+	for id, feedInfo := range v {
+		identities[id] = pickName(feedInfo)
+	}
+	return identities, nil
 }
 
 func getUniques(expectations map[string][]string) []string {
@@ -127,7 +137,7 @@ func main() {
 	for _, puppetName := range puppetNames {
 		puppetId := namesToIDs[puppetName]
 		fmt.Printf("enter %s\n", puppetName)
-		fmt.Printf("load %s\n", puppetId)
+		fmt.Printf("load %s %s\n", puppetName, puppetId)
 	}
 
 	// start the focus group

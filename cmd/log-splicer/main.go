@@ -115,7 +115,7 @@ func persistIdentityMapping(feeds map[string]FeedInfo, outdir string) error {
 	// map id to the identity folder (where the secret + offset.log lives) as well as the feed's latest sequence number
 	idsToFolders := make(map[string]FeedJSON)
 	for id, feedInfo := range feeds {
-		idsToFolders[id] = FeedJSON{Folder: feedInfo.identityFolder, Latest: feedInfo.latest}
+		idsToFolders[id] = FeedJSON{Folder: filepath.Base(feedInfo.identityFolder), Latest: feedInfo.latest}
 	}
 
 	// write a json blob mapping the identities to the folders containing their secret + log.offset
