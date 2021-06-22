@@ -290,7 +290,11 @@ func (s Simulator) execute() {
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
 		case "enter":
-			name := instr.args[0]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			p := Puppet{
 				name: name,
 				caps: s.caps,
@@ -303,22 +307,43 @@ func (s Simulator) execute() {
 				s.Abort(errors.New("no fixtures provided with --fixtures, yet tried to load feed from log.offset"))
 				continue
 			}
-			name := instr.args[0]
-			id := instr.args[1]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			id, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			p := s.getPuppet(name)
 			p.secretDir = s.getSecretDir(id)
 			p.feedID = id
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "skipoffset":
-			name := instr.args[0]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			p := s.getPuppet(name)
 			p.omitOffset = true
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "hops":
-			name := instr.args[0]
-			hops, err := strconv.Atoi(instr.args[1])
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			secondArg, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			hops, err := strconv.Atoi(secondArg)
 			if err != nil {
 				s.Abort(err)
 				continue
@@ -328,10 +353,18 @@ func (s Simulator) execute() {
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "caps":
-			name := instr.args[0]
-			caps := instr.args[1]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			caps, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			// perform validation on caps
-			_, err := base64.StdEncoding.DecodeString(caps)
+			_, err = base64.StdEncoding.DecodeString(caps)
 			if err != nil {
 				s.Abort(err)
 				continue
@@ -341,8 +374,16 @@ func (s Simulator) execute() {
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "start":
-			name := instr.args[0]
-			langImpl := instr.args[1]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			langImpl, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			if _, ok := s.implementations[langImpl]; !ok {
 				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
 				instr.TestFailure(err)
@@ -377,14 +418,23 @@ func (s Simulator) execute() {
 			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
-			name := instr.args[0]
+			name, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
 			p := s.getPuppet(name)
 			p.stop()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
 			srcPuppet := s.getSrcPuppet()
-			amount, err := strconv.Atoi(instr.getSecond())
+			arg, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			amount, err := strconv.Atoi(arg)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -392,7 +442,12 @@ func (s Simulator) execute() {
 			s.evaluateRun(err)
 			taplog(msg)
 		case "wait":
-			ms, err := time.ParseDuration(fmt.Sprintf("%sms", instr.getFirst()))
+			arg, err := instr.first()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			ms, err := time.ParseDuration(fmt.Sprintf("%sms", arg))
 			if err != nil {
 				instr.TestFailure(err)
 				continue
@@ -437,11 +492,16 @@ func (s Simulator) execute() {
 			err := DoConnect(srcPuppet, dstPuppet)
 			s.evaluateRun(err)
 		case "has":
-			arg := strings.Split(instr.getSecond(), "@")
+			line, err := instr.second()
+			if err != nil {
+				s.Abort(err)
+				continue
+			}
+			arg := strings.Split(line, "@")
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
-			err := DoHast(srcPuppet, dstPuppet, seq)
+			err = DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
 			// unknown command, abort test run
