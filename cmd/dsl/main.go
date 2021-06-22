@@ -139,6 +139,18 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		if err != nil {
 			bail(fmt.Sprintf("%v", err))
 		}
+		// make sure folder exists, otherwise bail out
+		_, err = os.Stat(botDir)
+		if err != nil {
+			msg := fmt.Sprintf("language implementation folder %s does not exist", bot)
+			bail(fmt.Sprintf("%s (%v)", msg, err))
+		}
+		// make sure sim-shim.sh exists, otherwise bail out
+		_, err = os.Stat(filepath.Join(botDir, "sim-shim.sh"))
+		if err != nil {
+			msg := fmt.Sprintf("sim-shim.sh is missing from root of sbot folder %s", bot)
+			bail(fmt.Sprintf("%s (%v)", msg, err))
+		}
 		// index language implementations by the last folder name
 		langMap[filepath.Base(botDir)] = botDir
 	}
