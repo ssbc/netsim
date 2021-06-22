@@ -40,13 +40,16 @@ func (instr Instruction) getDst() string {
 }
 
 // aliases of getSrc/getDst for args that don't correlate to src & dst :)
-func (instr Instruction) getFirst() string {
-	return instr.args[0]
+func (instr Instruction) first() (string, error) {
+	if len(instr.args) == 0 {
+		return "", fmt.Errorf("command was missing its first argument (%s:%d)", instr.line, instr.id)
+	}
+	return instr.args[0], nil
 }
 
-func (instr Instruction) getSecond() string {
-	if len(instr.args) > 1 {
-		return instr.args[1]
+func (instr Instruction) second() (string, error) {
+	if len(instr.args) < 2 {
+		return "", fmt.Errorf("%s was missing its second argument on line %d", instr.command, instr.id)
 	}
-	return ""
+	return instr.args[1], nil
 }
