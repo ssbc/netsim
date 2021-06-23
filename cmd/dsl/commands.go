@@ -105,29 +105,23 @@ func DoHast(src, dst Puppet, seqno string) error {
 	if err != nil {
 		return err
 	}
-	dstLatestSeqs, err := queryLatest(dst)
-	if err != nil {
-		return err
-	}
-
 	dstViaSrc := getLatestByFeedID(srcLatestSeqs, dst.feedID)
-	dstViaDst := getLatestByFeedID(dstLatestSeqs, dst.feedID)
 
 	var assertedSeqno int
 	if seqno == "latest" {
-		assertedSeqno = dstViaDst.Sequence
+		assertedSeqno = dst.seqno
 	} else {
 		assertedSeqno, err = strconv.Atoi(seqno)
 		if err != nil {
-			m := fmt.Sprintf("expected keyword 'latest' or a numberd\nwas %s", seqno)
+			m := fmt.Sprintf("expected keyword 'latest' or a number\nwas %s", seqno)
 			return TestError{err: errors.New("sequence number wasn't a number (or latest)"), message: m}
 		}
 	}
 
-	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dstViaDst.ID {
+	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dst.feedID {
 		return nil
 	} else {
-		m := fmt.Sprintf("expected: %s at sequence %d\nwas: %s at sequence %d", dstViaDst.ID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
+		m := fmt.Sprintf("expected: %s at sequence %d\nwas: %s at sequence %d", dst.feedID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
 		return TestError{err: errors.New("sequences didn't match"), message: m}
 	}
 }
