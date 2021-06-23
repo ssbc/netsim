@@ -301,6 +301,8 @@ func (s Simulator) execute() {
 
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
+		case "comment":
+			instr.TestSuccess()
 		case "enter":
 			name, err := instr.first()
 			if err != nil {
