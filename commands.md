@@ -38,6 +38,7 @@ isfollowing <name1> <name2>
 isnotfollowing <name1> <name2>
 connect <name1> <name2>
 disconnect <name1> <name2>
+comment <...> // always passes; can be used to write comments inside netsim tests
 ```
 
 ## Not yet implemented
