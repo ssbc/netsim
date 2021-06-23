@@ -36,6 +36,10 @@ type Puppet struct {
 	stopProcess context.CancelFunc
 }
 
+func (p Puppet) String() string {
+	return fmt.Sprintf("[%s@%d] %s", p.name, p.seqno, p.feedID)
+}
+
 func (p *Puppet) start(s Simulator, shim string) error {
 	filename := filepath.Join(s.puppetDir, fmt.Sprintf("%s.txt", p.name))
 	// open the log file and append to it. if it doesn't exist, create it first
@@ -212,6 +216,23 @@ func (s Simulator) getSecretDir(id string) string {
 	return info.Folder
 }
 
+func (s Simulator) getInstructionArg(n int) string {
+	var arg string
+	var err error
+	switch n {
+	case 1:
+		arg, err = s.instr.first()
+	case 2:
+		arg, err = s.instr.second()
+	default:
+		s.Abort(fmt.Errorf("getInstructionArg(): no such arg %d", n))
+	}
+	if err != nil {
+		s.Abort(err)
+	}
+	return arg
+}
+
 func (s Simulator) getFixturesLatestSeqno(id string) int {
 	info, has := s.fixturesIds[id]
 	if !has {
@@ -326,11 +347,7 @@ func (s Simulator) execute() {
 		case "comment":
 			instr.TestSuccess()
 		case "enter":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
 			p := Puppet{
 				name: name,
 				caps: s.caps,
@@ -343,16 +360,9 @@ func (s Simulator) execute() {
 				s.Abort(errors.New("no fixtures provided with --fixtures, yet tried to load feed from log.offset"))
 				continue
 			}
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
-			id, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
+			id := s.getInstructionArg(2)
+
 			p := s.getPuppet(name)
 			p.secretDir = s.getSecretDir(id)
 			p.seqno = s.getFixturesLatestSeqno(id)
@@ -360,27 +370,15 @@ func (s Simulator) execute() {
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "skipoffset":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
 			p := s.getPuppet(name)
 			p.omitOffset = true
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "hops":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
-			secondArg, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
-			hops, err := strconv.Atoi(secondArg)
+			name := s.getInstructionArg(1)
+			arg := s.getInstructionArg(2)
+			hops, err := strconv.Atoi(arg)
 			if err != nil {
 				s.Abort(err)
 				continue
@@ -390,18 +388,10 @@ func (s Simulator) execute() {
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "caps":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
-			caps, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
+			caps := s.getInstructionArg(2)
 			// perform validation on caps
-			_, err = base64.StdEncoding.DecodeString(caps)
+			_, err := base64.StdEncoding.DecodeString(caps)
 			if err != nil {
 				s.Abort(err)
 				continue
@@ -411,16 +401,8 @@ func (s Simulator) execute() {
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "start":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
-			langImpl, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
+			langImpl := s.getInstructionArg(2)
 			if _, ok := s.implementations[langImpl]; !ok {
 				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
 				instr.TestFailure(err)
@@ -455,22 +437,14 @@ func (s Simulator) execute() {
 			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
-			name, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			name := s.getInstructionArg(1)
 			p := s.getPuppet(name)
 			p.stop()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
 			srcPuppet := s.getSrcPuppet()
-			arg, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			arg := s.getInstructionArg(2)
 			amount, err := strconv.Atoi(arg)
 			if err != nil {
 				log.Fatalln(err)
@@ -479,11 +453,7 @@ func (s Simulator) execute() {
 			s.evaluateRun(err)
 			taplog(msg)
 		case "wait":
-			arg, err := instr.first()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			arg := s.getInstructionArg(1)
 			ms, err := time.ParseDuration(fmt.Sprintf("%sms", arg))
 			if err != nil {
 				instr.TestFailure(err)
