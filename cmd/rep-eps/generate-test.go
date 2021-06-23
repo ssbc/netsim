@@ -82,7 +82,10 @@ const SSB_SERVER = "ssb-server-REPLACEME"
 // uses:
 // * expectations.json
 // * root folder containing cmd&log-splicer processed fixtures
+var currentlyExecuting map[string]bool
+
 func main() {
+	currentlyExecuting = make(map[string]bool)
 	var fixturesRoot string
 	flag.StringVar(&fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
 	var expectationsPath string
@@ -213,13 +216,19 @@ func connect(issuer string, names []string) {
 
 func start(names []string) {
 	for _, name := range names {
-		fmt.Printf("start %s %s\n", name, SSB_SERVER)
+		if _, exists := currentlyExecuting[name]; !exists {
+			fmt.Printf("start %s %s\n", name, SSB_SERVER)
+			currentlyExecuting[name] = true
+		}
 	}
 }
 
 func stop(names []string) {
 	for _, name := range names {
-		fmt.Printf("stop %s\n", name)
+		if _, exists := currentlyExecuting[name]; exists {
+			delete(currentlyExecuting, name)
+			fmt.Printf("stop %s\n", name)
+		}
 	}
 }
 
