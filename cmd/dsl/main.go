@@ -29,7 +29,7 @@ type Puppet struct {
 	name       string
 	caps       string
 	hops       int
-	seqno      int64
+	seqno      int
 	secretDir  string
 	omitOffset bool
 
@@ -97,6 +97,11 @@ func (p Puppet) usesFixtures() bool {
 	return len(p.feedID) > 0 && len(p.secretDir) > 0
 }
 
+func (p *Puppet) bumpSeqno() {
+	p.seqno += 1
+}
+
+// TODO: convert all uses of testError to fmt.Errorf(msg + %w)
 type TestError struct {
 	err     error
 	message string
@@ -106,9 +111,16 @@ func (t TestError) Error() string {
 	return t.message
 }
 
+type FixturesFeedInfo struct {
+	Folder string `json:"folder"`
+	Latest int    `json:"latest"`
+}
+
 type Simulator struct {
-	puppetMap       map[string]Puppet
-	idFolders       map[string]string // map of [pubkey: <--fixtures folder containing secret for pubkey>]
+	puppetMap map[string]Puppet
+	// map of pubkey: {latest: int, folder: string}.
+	// `folder` is the spliced-out fixtures subfolder containing the secret + log.offset for pubkey
+	fixturesIds     map[string]FixturesFeedInfo
 	implementations map[string]string
 	puppetDir       string
 	caps            string // secret handshake capability key; also termed `shscap` (and sometimes appkey?) in ssb-go
@@ -132,7 +144,7 @@ func bail(msg string) {
 func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
 	puppetMap := make(map[string]Puppet)
 	langMap := make(map[string]string)
-	idFoldersMap := make(map[string]string)
+	fixturesIdsMap := make(map[string]FixturesFeedInfo)
 
 	for _, bot := range sbots {
 		botDir, err := filepath.Abs(bot)
@@ -161,13 +173,14 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 	}
 
 	// if we're loading fixtures, parse the identity-to-secret-folders map `secret-ids.json` (see cmd/log-splicer for info)
+	// secret-ids.json contains a map from feed id to { latest: int, folder: string }
 	if fixtures != "" {
-		idFolders, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
+		fixturesIds, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
 		if err != nil {
 			bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
 			return Simulator{}
 		}
-		err = json.Unmarshal(idFolders, &idFoldersMap)
+		err = json.Unmarshal(fixturesIds, &fixturesIdsMap)
 		if err != nil {
 			bail(fmt.Sprintf("%v", err))
 			return Simulator{}
@@ -177,7 +190,7 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 	sim := Simulator{
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
-		idFolders:       idFoldersMap,
+		fixturesIds:     fixturesIdsMap,
 		caps:            caps,
 		implementations: langMap,
 		basePort:        basePort,
@@ -191,12 +204,21 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 }
 
 func (s Simulator) getSecretDir(id string) string {
-	dir, has := s.idFolders[id]
+	info, has := s.fixturesIds[id]
 	if !has {
 		s.Abort(fmt.Errorf("cannot find id %s when getting secret dir", id))
 		return ""
 	}
-	return dir
+	return info.Folder
+}
+
+func (s Simulator) getFixturesLatestSeqno(id string) int {
+	info, has := s.fixturesIds[id]
+	if !has {
+		s.Abort(fmt.Errorf("cannot find id %s when getting latest seqno", id))
+		return -1
+	}
+	return info.Latest
 }
 
 func (s Simulator) getSrcPuppet() Puppet {
@@ -333,6 +355,7 @@ func (s Simulator) execute() {
 			}
 			p := s.getPuppet(name)
 			p.secretDir = s.getSecretDir(id)
+			p.seqno = s.getFixturesLatestSeqno(id)
 			p.feedID = id
 			s.puppetMap[name] = p
 			instr.TestSuccess()
@@ -475,6 +498,7 @@ func (s Simulator) execute() {
 			dstPuppet := s.getDstPuppet()
 			err := DoFollow(srcPuppet, dstPuppet, instr.command == "follow")
 			s.evaluateRun(err)
+			srcPuppet.bumpSeqno()
 		case "isfollowing":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
@@ -489,12 +513,14 @@ func (s Simulator) execute() {
 			srcPuppet := s.getSrcPuppet()
 			err := DoPost(srcPuppet)
 			s.evaluateRun(err)
+			srcPuppet.bumpSeqno()
 		case "publish":
 			postline := strings.Join(instr.args[1:], " ")
 			obj := parser.ParsePostLine(postline)
 			srcPuppet := s.getSrcPuppet()
 			err := DoPublish(srcPuppet, obj)
 			s.evaluateRun(err)
+			srcPuppet.bumpSeqno()
 		case "disconnect":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
