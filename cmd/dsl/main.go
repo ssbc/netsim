@@ -7,8 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/ssb-ngi-pointer/netsim/internal/parser"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"log"
 	"net"
@@ -20,6 +18,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ssb-ngi-pointer/netsim/internal/parser"
+	"golang.org/x/sync/errgroup"
 )
 
 type Puppet struct {
@@ -112,7 +113,7 @@ type TestError struct {
 }
 
 func (t TestError) Error() string {
-	return t.message
+	return t.message + ": " + t.err.Error()
 }
 
 type FixturesFeedInfo struct {
@@ -461,6 +462,14 @@ func (s Simulator) execute() {
 			}
 			sleeper.sleep(ms)
 			instr.TestSuccess()
+		case "waituntil":
+			line := s.getInstructionArg(2)
+			arg := strings.Split(line, "@")
+			dst, seq := arg[0], arg[1]
+			srcPuppet := s.getSrcPuppet()
+			dstPuppet := s.getPuppet(dst)
+			err := DoWaitUntil(srcPuppet, dstPuppet, seq)
+			s.evaluateRun(err)
 		case "unfollow":
 			fallthrough
 		case "follow":
@@ -502,16 +511,12 @@ func (s Simulator) execute() {
 			err := DoConnect(srcPuppet, dstPuppet)
 			s.evaluateRun(err)
 		case "has":
-			line, err := instr.second()
-			if err != nil {
-				s.Abort(err)
-				continue
-			}
+			line := s.getInstructionArg(2)
 			arg := strings.Split(line, "@")
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
-			err = DoHast(srcPuppet, dstPuppet, seq)
+			err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 		default:
 			// unknown command, abort test run
