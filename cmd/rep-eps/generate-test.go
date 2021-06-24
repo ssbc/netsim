@@ -74,28 +74,36 @@ func getUniques(expectations map[string][]string) []string {
 	return uniques
 }
 
-const MAX_COUNT = 4
-const WAIT_DURATION = 2000
-const BATCH_SIZE = 3
-const SSB_SERVER = "ssb-server-REPLACEME"
+type runtimeArgs struct {
+	ssbServer        string
+	fixturesRoot     string
+	expectationsPath string
+	batchSize        int
+	waitDuration     int
+	focusedPuppets   int
+}
 
 // uses:
 // * expectations.json
 // * root folder containing cmd&log-splicer processed fixtures
 var currentlyExecuting map[string]bool
 
+var args runtimeArgs
+
 func main() {
 	currentlyExecuting = make(map[string]bool)
-	var fixturesRoot string
-	flag.StringVar(&fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
-	var expectationsPath string
-	flag.StringVar(&expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
+	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
+	flag.StringVar(&args.expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
+	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
+	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
+	flag.IntVar(&args.batchSize, "batch", 3, "number of puppets to run concurrently")
+	flag.IntVar(&args.waitDuration, "wait", 2000, "the default wait duration")
 	flag.Parse()
 
-	expectations, err := readExpectations(expectationsPath)
+	expectations, err := readExpectations(args.expectationsPath)
 	check(err)
 
-	idsToNames, err := getIdentities(fixturesRoot)
+	idsToNames, err := getIdentities(args.fixturesRoot)
 	check(err)
 
 	puppetNames := make([]string, 0, len(idsToNames))
@@ -124,8 +132,8 @@ func main() {
 	// }
 
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
-	focusGroup := make([]string, MAX_COUNT)
-	for i := 0; i < MAX_COUNT; i++ {
+	focusGroup := make([]string, args.focusedPuppets)
+	for i := 0; i < args.focusedPuppets; i++ {
 		focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
 	// deterministically shuffle the focus group
@@ -155,6 +163,9 @@ func main() {
 		batchConnect(focusedName, replicateeNames)
 	}
 
+	// make sure focus group is running
+	start(focusGroup)
+
 	// output `has` stmts
 	for _, name := range focusGroup {
 		focusedId := namesToIDs[name]
@@ -162,7 +173,7 @@ func main() {
 	}
 
 	stop(focusGroup)
-	fmt.Printf("\ntotal time: %d seconds\n", totalTime/1000)
+	fmt.Printf("comment total time: %d seconds\n", totalTime/1000)
 }
 
 // batching logic for connections from each focused puppet to their expected replicatees
@@ -172,8 +183,8 @@ func batchConnect(issuer string, replicateeNames []string) {
 	var endRange int
 
 	for {
-		startRange := count * BATCH_SIZE
-		endRange = (count + 1) * BATCH_SIZE
+		startRange := count * args.batchSize
+		endRange = (count + 1) * args.batchSize
 		if endRange >= len(replicateeNames) {
 			endRange = len(replicateeNames)
 			finished = true
@@ -186,10 +197,11 @@ func batchConnect(issuer string, replicateeNames []string) {
 		wait()
 
 		disconnect(issuer, subset)
-		wait()
-		stop(subset)
+		// wait()
+		// stop(subset)
 
 		if finished {
+			wait()
 			break
 		}
 		count += 1
@@ -217,7 +229,7 @@ func connect(issuer string, names []string) {
 func start(names []string) {
 	for _, name := range names {
 		if _, exists := currentlyExecuting[name]; !exists {
-			fmt.Printf("start %s %s\n", name, SSB_SERVER)
+			fmt.Printf("start %s %s\n", name, args.ssbServer)
 			currentlyExecuting[name] = true
 		}
 	}
@@ -235,6 +247,6 @@ func stop(names []string) {
 var totalTime int
 
 func wait() {
-	totalTime += WAIT_DURATION
-	fmt.Printf("wait %d\n", WAIT_DURATION)
+	totalTime += args.waitDuration
+	fmt.Printf("wait %d\n", args.waitDuration)
 }
