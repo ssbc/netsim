@@ -8,6 +8,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.cryptoscope.co/muxrpc/v2"
 	refs "go.mindeco.de/ssb-refs"
@@ -126,6 +127,67 @@ func DoHast(src, dst Puppet, seqno string) error {
 	}
 }
 
+func DoWaitUntil(src, dst Puppet, seqno string) error {
+	var assertedSeqno int
+	if seqno == "latest" {
+		assertedSeqno = dst.seqno
+	} else {
+		var err error
+		assertedSeqno, err = strconv.Atoi(seqno)
+		if err != nil {
+			m := fmt.Sprintf("expected keyword 'latest' or a number\nwas %s", seqno)
+			return TestError{err: errors.New("sequence number wasn't a number (or latest)"), message: m}
+		}
+	}
+
+	_, err := DoCreateHistoryStream(src, dst.feedID, assertedSeqno, true)
+	if err != nil {
+		m := fmt.Sprintf("expected: %s to receive %s:%d", src.name, dst.name, assertedSeqno)
+		return TestError{err: err, message: m}
+	}
+
+	return nil
+}
+
+func DoCreateHistoryStream(p Puppet, who string, n int, live bool) (string, error) {
+	type histOptions struct {
+		ID    string `json:"id"`
+		Seq   int    `json:"seq"`
+		Live  bool   `json:"live"`
+		Limit int    `json:"limit"`
+	}
+
+	// only get the last n logs
+	opts := histOptions{
+		ID:    who,
+		Seq:   n,
+		Live:  live,
+		Limit: 1,
+	}
+	c, src, err := sourceRequest(p, muxrpc.Method{"createHistoryStream"}, opts)
+	if err != nil {
+		return "", err
+	}
+	defer c.Terminate()
+
+	var response []string
+	ctx := context.TODO() // TODO get simulation context
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if !src.Next(ctx) {
+		if err := src.Err(); err != nil {
+			return "", err
+		}
+	}
+
+	err = src.Reader(prettyPrintSourceJSON(response))
+	if err != nil {
+		return "", err
+	}
+
+	return strings.Join(response, "\n"), nil
+}
+
 func DoWhoami(p Puppet) (string, error) {
 	var parsed Whoami
 	var empty interface{}
@@ -150,37 +212,43 @@ func DoLog(p Puppet, n int) (string, error) {
 	}
 	defer c.Terminate()
 
-	var v interface{}
 	var response []string
 	ctx := context.TODO()
 	for src.Next(ctx) {
-		err = src.Reader(func(rd io.Reader) error {
-			// read all the json-encoded data as bytes
-			b, err := io.ReadAll(rd)
-			if err != nil {
-				return err
-			}
-			// decode it into a generic struct
-			err = json.Unmarshal(b, &v)
-			if err != nil {
-				return err
-			}
-			// interpret the struct as a map of [strings -> empty interfaces]
-			s := v.(map[string]interface{})
-			// marshall everything as bytes of json to get the correct indentation, prettifying the output
-			b, err = json.MarshalIndent(s, "", " ")
-			if err != nil {
-				return err
-			}
-			// encode the json bytes as utf-8 characters
-			response = append(response, string(b))
-			return err
-		})
+		err = src.Reader(prettyPrintSourceJSON(response))
 		if err != nil {
 			return "", err
 		}
 	}
 	return strings.Join(response, "\n"), nil
+}
+
+func prettyPrintSourceJSON(response []string) func(rd io.Reader) error {
+	var genericMap map[string]interface{}
+
+	return func(rd io.Reader) error {
+		// read all the json-encoded data as bytes
+		b, err := io.ReadAll(rd)
+		if err != nil {
+			return err
+		}
+		// decode it into a generic map
+		err = json.Unmarshal(b, &genericMap)
+		if err != nil {
+			return err
+		}
+
+		// marshall everything as bytes of json to get the correct indentation, prettifying the output
+		b, err = json.MarshalIndent(genericMap, "", " ")
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("DEBUG:", string(b))
+		// encode the json bytes as utf-8 characters
+		response = append(response, string(b))
+		return err
+	}
 }
 
 func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
