@@ -28,6 +28,7 @@ skipoffset <name>       // should be called before starting a peer to have any e
 load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>
+log <name> <amount of messages from the end to debug print>
 wait <milliseconds>
 has <name1> <name2>@<latest||seqno>
 post <name>
