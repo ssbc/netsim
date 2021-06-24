@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 )
 
 func check(err error) {
@@ -75,7 +76,10 @@ func collapse(args runtimeArgs, peers map[string]peer) {
 }
 
 func pathAndFile(dirpath, name string) string {
-	return path.Join(path.Dir(dirpath), name)
+	if strings.HasSuffix(dirpath, "json") {
+		dirpath = path.Dir(dirpath)
+	}
+	return path.Join(dirpath, name)
 }
 
 func produceExpectations(args runtimeArgs, graphpath string) {
