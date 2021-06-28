@@ -135,6 +135,19 @@ func copySecret(identityFolder string, b []byte) error {
 	return err
 }
 
+func copyFile(src, outdir string) error {
+	// read the file
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	filename := filepath.Base(src)
+	dst := filepath.Join(outdir, filename)
+	// write the file
+	err = os.WriteFile(dst, b, 0600)
+	return err
+}
+
 func derivePuppetName(secretFilename string) (string, error) {
 	// write puppet names based on secret names, to preserve the implicit pareto distribution of post authors
 	// (authors with lower secret ids make more posts)
@@ -259,6 +272,11 @@ func spliceLogs(args runtimeArgs) error {
 	}
 
 	err = persistIdentityMapping(feeds, outdir)
+	if err != nil {
+		return err
+	}
+
+	err = copyFile(filepath.Join(indir, "follow-graph.json"), outdir)
 	if err != nil {
 		return err
 	}
