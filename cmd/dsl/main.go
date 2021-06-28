@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -33,8 +34,9 @@ type Puppet struct {
 	seqno      int
 	secretDir  string
 	omitOffset bool
+	cmd        *exec.Cmd
 
-	stopProcess context.CancelFunc
+	stopProcess chan bool
 }
 
 func (p Puppet) String() string {
@@ -57,15 +59,11 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	defer logfile.Close()
 	var cmd *exec.Cmd
 
-	// construct child context for individual cancelation/stopping
-	var ctx context.Context
-	ctx, p.stopProcess = context.WithCancel(s.rootCtx)
-
 	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
 	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
 	// e.g. reading the passed in ssb directory ($1) and port ($2)
 	shimPath := filepath.Join(s.implementations[shim], "sim-shim.sh")
-	cmd = exec.CommandContext(ctx, shimPath, p.directory, strconv.Itoa(p.Port))
+	cmd = exec.CommandContext(s.rootCtx, shimPath, p.directory, strconv.Itoa(p.Port))
 
 	// the environment variables CAPS and HOPS contains the caps (default: ssb caps) and hops (default: 2) settings for
 	// the puppet, and must be set correctly in each implementation's sim-shim.sh
@@ -86,16 +84,45 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 	cmd.Stderr = writer
 	cmd.Stdout = writer
-	err = cmd.Run()
+	err = cmd.Start()
+
+	p.cmd = cmd
 	if err != nil {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
 	}
+
+	fmt.Println("yo interrupt begin")
+	// detect stop & issue sigint (allows us to do cleanup)
+	go func() {
+		<-p.stopProcess
+		fmt.Println("yo interrupt happened!!!!1")
+		fmt.Println("runtime", runtime.GOOS)
+		// Windows doesn't support Interrupt
+		if runtime.GOOS == "windows" {
+			_ = cmd.Process.Signal(os.Kill)
+		}
+
+		// go func() {
+		// 	time.Sleep(2 * time.Second)
+		// 	_ = cmd.Process.Signal(os.Kill)
+		// }()
+		cmd.Process.Signal(os.Interrupt)
+	}()
+
 	return nil
 }
 
 func (p Puppet) stop() {
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
-	p.stopProcess()
+	taplog("issued stop over channel")
+	p.stopProcess <- true
+	taplog("cmd.Wait before")
+	err := p.cmd.Wait()
+	taplog("cmd.Wait finished")
+	if err != nil {
+		fmt.Println(err)
+		// return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
+	}
 }
 
 func (p Puppet) usesFixtures() bool {
@@ -354,6 +381,7 @@ func (s Simulator) execute() {
 				caps: s.caps,
 				hops: s.hops,
 			}
+			p.stopProcess = make(chan bool)
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "load":
