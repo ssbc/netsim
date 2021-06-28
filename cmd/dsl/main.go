@@ -35,8 +35,6 @@ type Puppet struct {
 	secretDir  string
 	omitOffset bool
 	cmd        *exec.Cmd
-
-	stopProcess chan bool
 }
 
 func (p Puppet) String() string {
@@ -85,37 +83,33 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	cmd.Stderr = writer
 	cmd.Stdout = writer
 	err = cmd.Start()
-
-	p.cmd = cmd
 	if err != nil {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
 	}
 
-	fmt.Println("yo interrupt begin")
-	// detect stop & issue sigint (allows us to do cleanup)
-	go func() {
-		<-p.stopProcess
-		fmt.Println("yo interrupt happened!!!!1")
-		fmt.Println("runtime", runtime.GOOS)
-		// Windows doesn't support Interrupt
-		if runtime.GOOS == "windows" {
-			_ = cmd.Process.Signal(os.Kill)
-		}
-
-		// go func() {
-		// 	time.Sleep(2 * time.Second)
-		// 	_ = cmd.Process.Signal(os.Kill)
-		// }()
-		cmd.Process.Signal(os.Interrupt)
-	}()
-
+	p.cmd = cmd
 	return nil
 }
 
 func (p Puppet) stop() {
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
-	taplog("issued stop over channel")
-	p.stopProcess <- true
+
+	// issue sigint (allows us to do cleanup)
+
+	// Windows doesn't support Interrupt
+	if runtime.GOOS == "windows" {
+		p.cmd.Process.Signal(os.Kill)
+	} else {
+		p.cmd.Process.Signal(os.Interrupt)
+	}
+
+	// Last restort shutdown
+	// cancel
+	// go func() {
+	// 	time.Sleep(2 * time.Second)
+	// 	_ = cmd.Process.Signal(os.Kill)
+	// }()
+
 	taplog("cmd.Wait before")
 	err := p.cmd.Wait()
 	taplog("cmd.Wait finished")
@@ -381,7 +375,6 @@ func (s Simulator) execute() {
 				caps: s.caps,
 				hops: s.hops,
 			}
-			p.stopProcess = make(chan bool)
 			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "load":
