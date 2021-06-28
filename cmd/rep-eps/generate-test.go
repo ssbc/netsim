@@ -36,6 +36,34 @@ func pickName(splicedFixturesMap map[string]interface{}) string {
 	return splicedFixturesMap["folder"].(string)
 }
 
+func getFollowMap(followGraphPath string) (map[string][]string, error) {
+	// get the json map of all known relations
+	b, err := os.ReadFile(followGraphPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// unpack into goland
+	var v map[string]map[string]bool
+	err = json.Unmarshal(b, &v)
+	if err != nil {
+		return nil, err
+	}
+
+	// map ids to a slice of whom they follow
+	followMap := make(map[string][]string)
+	for id, relations := range v {
+		var following []string
+		for other, isFollowing := range relations {
+			if isFollowing {
+				following = append(following, other)
+			}
+		}
+		followMap[id] = following
+	}
+	return followMap, nil
+}
+
 func getIdentities(fixturesRoot string) (map[string]string, error) {
 	b, err := os.ReadFile(path.Join(fixturesRoot, "secret-ids.json"))
 	if err != nil {
@@ -90,6 +118,8 @@ var currentlyExecuting map[string]bool
 
 var args runtimeArgs
 
+var focusGroup []string
+
 func main() {
 	currentlyExecuting = make(map[string]bool)
 	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
@@ -101,6 +131,10 @@ func main() {
 	flag.Parse()
 
 	expectations, err := readExpectations(args.expectationsPath)
+	check(err)
+
+	// map of id -> [list of followed ids]
+	followMap, err := getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
 	check(err)
 
 	idsToNames, err := getIdentities(args.fixturesRoot)
@@ -132,7 +166,7 @@ func main() {
 	// }
 
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
-	focusGroup := make([]string, args.focusedPuppets)
+	focusGroup = make([]string, args.focusedPuppets)
 	for i := 0; i < args.focusedPuppets; i++ {
 		focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
@@ -159,7 +193,7 @@ func main() {
 	// replicate)
 	for _, focusedName := range focusGroup {
 		focusedId := namesToIDs[focusedName]
-		replicateeNames := getNames(expectations[focusedId])
+		replicateeNames := getNames(followMap[focusedId])
 		batchConnect(focusedName, replicateeNames)
 	}
 
@@ -177,6 +211,8 @@ func main() {
 }
 
 // batching logic for connections from each focused puppet to their expected replicatees
+// TODO: make batching logic a lot smarter, so that we don't stop puppets until we know that they will no longer appear
+// in any future batches
 func batchConnect(issuer string, replicateeNames []string) {
 	var count int
 	var finished bool
@@ -190,15 +226,19 @@ func batchConnect(issuer string, replicateeNames []string) {
 			finished = true
 		}
 
-		subset := replicateeNames[startRange:endRange]
+		var subset []string
+		for _, replicatee := range replicateeNames[startRange:endRange] {
+			if replicatee != issuer {
+				subset = append(subset, replicatee)
+			}
+		}
 
 		start(subset)
 		connect(issuer, subset)
-		wait()
-
+		waitUntil(issuer, subset)
 		disconnect(issuer, subset)
 		// wait()
-		// stop(subset)
+		stop(subset)
 
 		if finished {
 			wait()
@@ -237,10 +277,26 @@ func start(names []string) {
 
 func stop(names []string) {
 	for _, name := range names {
+		var skip bool
+		for _, focusName := range focusGroup {
+			if name == focusName {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
 		if _, exists := currentlyExecuting[name]; exists {
 			delete(currentlyExecuting, name)
 			fmt.Printf("stop %s\n", name)
 		}
+	}
+}
+
+func waitUntil(issuer string, names []string) {
+	for _, name := range names {
+		fmt.Printf("waituntil %s %s@latest\n", issuer, name)
 	}
 }
 
