@@ -244,7 +244,6 @@ func prettyPrintSourceJSON(response []string) func(rd io.Reader) error {
 			return err
 		}
 
-		fmt.Println("DEBUG:", string(b))
 		// encode the json bytes as utf-8 characters
 		response = append(response, string(b))
 		return err
