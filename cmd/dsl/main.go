@@ -505,7 +505,7 @@ func (s Simulator) execute() {
 			dstPuppet := s.getPuppet(dst)
 			message, err := DoWaitUntil(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
-			if err == nil && message != "" {
+			if err == nil {
 				taplog(message)
 			}
 		case "unfollow":
@@ -549,6 +549,8 @@ func (s Simulator) execute() {
 			dstPuppet := s.getDstPuppet()
 			err := DoConnect(srcPuppet, dstPuppet)
 			// TODO: re-evaluate need of sleeping after connection
+			// current need: make sure no puppet tries to hit the remote sbot too quickly (saw some error with like EOF
+			// something something)
 			sleeper.sleep(200 * time.Millisecond)
 			s.evaluateRun(err)
 		case "has":
@@ -559,7 +561,7 @@ func (s Simulator) execute() {
 			dstPuppet := s.getPuppet(dst)
 			message, err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
-			if err == nil && message != "" {
+			if err == nil {
 				taplog(message)
 			}
 		default:

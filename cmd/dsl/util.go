@@ -20,6 +20,9 @@ func multiserverAddr(p Puppet) string {
 }
 
 func taplog(str string) {
+	if str == "" {
+		return
+	}
 	for _, line := range strings.Split(str, "\n") {
 		fmt.Printf("# %s\n", line)
 	}
