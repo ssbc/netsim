@@ -450,15 +450,12 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
-			// TODO: make this more resource efficient (retry or sth)
+			// TODO: make this more resource efficient (have a retry loop that tries to ping puppet's sbot, exit when ok)
+			// look at waituntil's implementation for a good solution?
 			sleeper.sleep(1 * time.Second)
 
-			// TODO: if fixture has been loaded for this peer, exit early & omit doing whoami to find out feedID
-			// (we already know its feed id) as there will be time required for the sbot to index the ingested log.offset, my
-			// current thought is to punt that concern to the test author by requiring a large enough `wait <name>` after
-			// starting a fixtures-loaded peer
-			//
-			// maybe later the wait command can be more intelligent and try the debouncing strategy cel mentioned
+			// if this puppet is loaded from fixtures, omit doing whoami to find out its feedID
+			// (we already know it)
 			if !p.usesFixtures() {
 				feedID, err := DoWhoami(p)
 				if err != nil {
@@ -506,8 +503,11 @@ func (s Simulator) execute() {
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
-			err := DoWaitUntil(srcPuppet, dstPuppet, seq)
+			message, err := DoWaitUntil(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
+			if err == nil && message != "" {
+				taplog(message)
+			}
 		case "unfollow":
 			fallthrough
 		case "follow":
@@ -557,8 +557,11 @@ func (s Simulator) execute() {
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
-			err := DoHast(srcPuppet, dstPuppet, seq)
+			message, err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
+			if err == nil && message != "" {
+				taplog(message)
+			}
 		default:
 			// unknown command, abort test run
 			s.Abort(errors.New("Unknown simulator command"))

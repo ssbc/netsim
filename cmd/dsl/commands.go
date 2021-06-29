@@ -100,53 +100,60 @@ func queryLatest(p Puppet) ([]Latest, error) {
 	return seqnos, nil
 }
 
-// really bad Rammstein pun, sorry (absolutely not sorry)
-func DoHast(src, dst Puppet, seqno string) error {
-	srcLatestSeqs, err := queryLatest(src)
-	if err != nil {
-		return err
-	}
-	dstViaSrc := getLatestByFeedID(srcLatestSeqs, dst.feedID)
-
+func extractSeqno(dst Puppet, seqno string) (int, string, error) {
 	var assertedSeqno int
+	var assumption string
 	if seqno == "latest" {
 		assertedSeqno = dst.seqno
-	} else {
-		assertedSeqno, err = strconv.Atoi(seqno)
-		if err != nil {
-			m := fmt.Sprintf("expected keyword 'latest' or a number\nwas %s", seqno)
-			return TestError{err: errors.New("sequence number wasn't a number (or latest)"), message: m}
-		}
-	}
-
-	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dst.feedID {
-		return nil
-	} else {
-		m := fmt.Sprintf("expected: %s at sequence %d\nwas: %s at sequence %d", dst.feedID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
-		return TestError{err: errors.New("sequences didn't match"), message: m}
-	}
-}
-
-func DoWaitUntil(src, dst Puppet, seqno string) error {
-	var assertedSeqno int
-	if seqno == "latest" {
-		assertedSeqno = dst.seqno
+		assumption = fmt.Sprintf("assuming %s@latest => %s@%d", dst.name, dst.name, dst.seqno)
 	} else {
 		var err error
 		assertedSeqno, err = strconv.Atoi(seqno)
 		if err != nil {
 			m := fmt.Sprintf("expected keyword 'latest' or a number\nwas %s", seqno)
-			return TestError{err: errors.New("sequence number wasn't a number (or latest)"), message: m}
+			return -1, "", TestError{err: errors.New("sequence number wasn't a number (or latest)"), message: m}
 		}
 	}
+	return assertedSeqno, assumption, nil
+}
 
-	_, err := DoCreateHistoryStream(src, dst.feedID, assertedSeqno, true)
+// really bad Rammstein pun, sorry (absolutely not sorry)
+func DoHast(src, dst Puppet, seqno string) (string, error) {
+	srcLatestSeqs, err := queryLatest(src)
 	if err != nil {
-		m := fmt.Sprintf("expected: %s to receive %s:%d", src.name, dst.name, assertedSeqno)
-		return TestError{err: err, message: m}
+		return "", err
+	}
+	dstViaSrc := getLatestByFeedID(srcLatestSeqs, dst.feedID)
+
+	// get the asserted seqno and a message, if we're inducting a seqno based on available info
+	// (i.e. stating what how we're interpreting alice@latest)
+	assertedSeqno, message, err := extractSeqno(dst, seqno)
+	if err != nil {
+		return "", err
 	}
 
-	return nil
+	if dstViaSrc.Sequence == assertedSeqno && dstViaSrc.ID == dst.feedID {
+		return message, nil
+	} else {
+		m := fmt.Sprintf("expected: %s at sequence %d\nwas: %s at sequence %d", dst.feedID, assertedSeqno, dstViaSrc.ID, dstViaSrc.Sequence)
+		return "", TestError{err: errors.New("sequences didn't match"), message: m}
+	}
+}
+
+func DoWaitUntil(src, dst Puppet, seqno string) (string, error) {
+	assertedSeqno, message, err := extractSeqno(dst, seqno)
+	if err != nil {
+		return "", err
+	}
+
+	// do create history stream, with some special options, to block on the destination puppet until we receive assertedSeqno
+	_, err = DoCreateHistoryStream(src, dst.feedID, assertedSeqno, true)
+	if err != nil {
+		m := fmt.Sprintf("%s expected %s@%d", src.name, dst.name, assertedSeqno)
+		return "", TestError{err: err, message: m}
+	}
+
+	return message, nil
 }
 
 func DoCreateHistoryStream(p Puppet, who string, n int, live bool) (string, error) {
