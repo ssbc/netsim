@@ -237,7 +237,7 @@ func batchConnect(issuer string, replicateeNames []string) {
 		connect(issuer, subset)
 		waitUntil(issuer, subset)
 		disconnect(issuer, subset)
-		// wait()
+		waitMs(500)
 		stop(subset)
 
 		if finished {
@@ -301,6 +301,11 @@ func waitUntil(issuer string, names []string) {
 }
 
 var totalTime int
+
+func waitMs(ms int) {
+	totalTime += ms
+	fmt.Printf("wait %d\n", ms)
+}
 
 func wait() {
 	totalTime += args.waitDuration

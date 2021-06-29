@@ -30,6 +30,7 @@ start <name> <implementation-folder>
 stop <name>
 log <name> <amount of messages from the end to debug print>
 wait <milliseconds>
+waituntil <name1> <name2>@<latest||seqno>
 has <name1> <name2>@<latest||seqno>
 post <name>
 publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)

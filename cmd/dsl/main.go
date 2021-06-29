@@ -24,6 +24,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type Process struct {
+	cmd     *exec.Cmd
+	logfile *os.File
+}
+
 type Puppet struct {
 	Port       int
 	directory  string
@@ -34,7 +39,7 @@ type Puppet struct {
 	seqno      int
 	secretDir  string
 	omitOffset bool
-	cmd        *exec.Cmd
+	process    Process // holds cmd & logfile of a running puppet process
 }
 
 func (p Puppet) String() string {
@@ -49,12 +54,11 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	var writer io.Writer
 	writer = logfile
 	if s.verbose {
-		writer = io.MultiWriter(logfile, os.Stdout)
+		writer = io.MultiWriter(os.Stdout, logfile)
 	}
 	if err != nil {
 		return TestError{err: err, message: "could not create log file"}
 	}
-	defer logfile.Close()
 	var cmd *exec.Cmd
 
 	// currently the simulator has a requirement that each language implementation folder must contain a sim-shim.sh file
@@ -82,41 +86,46 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 	cmd.Stderr = writer
 	cmd.Stdout = writer
+	// store cmd & logfile in puppet for use when we shut it down with e.g. the stop command
+	p.process = Process{cmd: cmd, logfile: logfile}
 	err = cmd.Start()
 	if err != nil {
 		return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
 	}
 
-	p.cmd = cmd
 	return nil
 }
 
-func (p Puppet) stop() {
+func (p Puppet) stop() error {
+	cmd, logfile := p.process.cmd, p.process.logfile
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
-
-	// issue sigint (allows us to do cleanup)
-
+	// issue an interrupt to the process (allows us to do cleanup in sbots)
 	// Windows doesn't support Interrupt
 	if runtime.GOOS == "windows" {
-		p.cmd.Process.Signal(os.Kill)
+		cmd.Process.Signal(os.Kill)
 	} else {
-		p.cmd.Process.Signal(os.Interrupt)
+		cmd.Process.Signal(os.Interrupt)
 	}
 
-	// Last restort shutdown
-	// cancel
+	// TODO: re-enable once the test generation is confirmed to work for large batches
+	// last resort shutdown
 	// go func() {
 	// 	time.Sleep(2 * time.Second)
 	// 	_ = cmd.Process.Signal(os.Kill)
 	// }()
 
-	taplog("cmd.Wait before")
-	err := p.cmd.Wait()
-	taplog("cmd.Wait finished")
+	// wait for the process to wrap up
+	err := cmd.Wait()
 	if err != nil {
-		fmt.Println(err)
-		// return TestError{err: err, message: fmt.Sprintf("failure when creating puppet, see %s for information", filename)}
+		return TestError{err: err, message: fmt.Sprintf("failure when stopping puppet")}
 	}
+	// close the logfile
+	err = logfile.Close()
+	if err != nil {
+		return TestError{err: err, message: fmt.Sprintf("failure when closing logfile")}
+	}
+	p.process = Process{}
+	return nil
 }
 
 func (p Puppet) usesFixtures() bool {
@@ -436,7 +445,12 @@ func (s Simulator) execute() {
 			p.Port = s.acquirePort()
 			p.directory = fullpath
 
-			go p.start(s, langImpl)
+			err := p.start(s, langImpl)
+			if err != nil {
+				instr.TestFailure(err)
+				continue
+			}
+			// TODO: make this more resource efficient (retry or sth)
 			sleeper.sleep(1 * time.Second)
 
 			// TODO: if fixture has been loaded for this peer, exit early & omit doing whoami to find out feedID
@@ -461,7 +475,10 @@ func (s Simulator) execute() {
 		case "stop":
 			name := s.getInstructionArg(1)
 			p := s.getPuppet(name)
-			p.stop()
+			err := p.stop()
+			if err != nil {
+				s.Abort(err)
+			}
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
@@ -496,6 +513,7 @@ func (s Simulator) execute() {
 		case "follow":
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
+			// TODO: check id and err if id not set
 			err := DoFollow(srcPuppet, dstPuppet, instr.command == "follow")
 			s.evaluateRun(err)
 			srcPuppet.bumpSeqno()
@@ -530,6 +548,8 @@ func (s Simulator) execute() {
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getDstPuppet()
 			err := DoConnect(srcPuppet, dstPuppet)
+			// TODO: re-evaluate need of sleeping after connection
+			sleeper.sleep(200 * time.Millisecond)
 			s.evaluateRun(err)
 		case "has":
 			line := s.getInstructionArg(2)
