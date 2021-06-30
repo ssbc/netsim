@@ -48,7 +48,7 @@ func populateHopsAt(args runtimeArgs, count int, peers map[string]peer) {
 }
 
 // TODO: should we include hops[0]? i.e. the peer we are inspecting
-func collapse(args runtimeArgs, peers map[string]peer) {
+func collapse(args runtimeArgs, peers map[string]peer, blocked map[string]map[string]bool) {
 	// prune out duplicates when collapsing the map
 	collapsedHops := make(map[string]map[string]bool)
 	for id, p := range peers {
@@ -64,6 +64,10 @@ func collapse(args runtimeArgs, peers map[string]peer) {
 	outputMap := make(map[string][]string)
 	for id, others := range collapsedHops {
 		for otherId := range others {
+			// otherId has blocked id -> we should not expect to replicate them
+			if blocked[otherId][id] && !args.replicateBlocked {
+				continue
+			}
 			outputMap[id] = append(outputMap[id], otherId)
 		}
 	}
@@ -95,8 +99,10 @@ func produceExpectations(args runtimeArgs, graphpath string) {
 	// true => peer is followed
 	// false => peer is blocked
 	peers := make(map[string]peer)
+	blocked := make(map[string]map[string]bool)
 	for id, relations := range v {
 		p := makePeer(args, id)
+		blocked[id] = make(map[string]bool)
 		p.hops[0] = append(p.hops[0], id)
 		for relationId, status := range relations {
 			if followed, ok := status.(bool); ok {
@@ -106,6 +112,7 @@ func produceExpectations(args runtimeArgs, graphpath string) {
 					// and blocked if false
 				} else {
 					p.blocked[relationId] = true
+					blocked[id][relationId] = true
 				}
 			}
 		}
@@ -117,7 +124,7 @@ func produceExpectations(args runtimeArgs, graphpath string) {
 			populateHopsAt(args, i, peers)
 		}
 	}
-	collapse(args, peers)
+	collapse(args, peers, blocked)
 }
 
 type runtimeArgs struct {

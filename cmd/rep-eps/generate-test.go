@@ -36,32 +36,38 @@ func pickName(splicedFixturesMap map[string]interface{}) string {
 	return splicedFixturesMap["folder"].(string)
 }
 
-func getFollowMap(followGraphPath string) (map[string][]string, error) {
+// Returns a map of follows (id -> slice of ids that are followed), a map of blocks (isBlocking[id][otherId] = true if id blocks otherId)
+func getFollowMap(followGraphPath string) (map[string][]string, map[string]map[string]bool, error) {
 	// get the json map of all known relations
 	b, err := os.ReadFile(followGraphPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// unpack into goland
-	var v map[string]map[string]bool
+	var v map[string]map[string]interface{}
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	// map ids to a slice of whom they follow
 	followMap := make(map[string][]string)
+	blockMap := make(map[string]map[string]bool)
 	for id, relations := range v {
 		var following []string
-		for other, isFollowing := range relations {
-			if isFollowing {
-				following = append(following, other)
+		blockMap[id] = make(map[string]bool)
+		for relationId, status := range relations {
+			if isFollowing, ok := status.(bool); ok {
+				if isFollowing {
+					following = append(following, relationId)
+				} else {
+					blockMap[id][relationId] = true
+				}
 			}
+			followMap[id] = following
 		}
-		followMap[id] = following
 	}
-	return followMap, nil
+	return followMap, blockMap, nil
 }
 
 func getIdentities(fixturesRoot string) (map[string]string, error) {
@@ -119,6 +125,7 @@ var currentlyExecuting map[string]bool
 var args runtimeArgs
 
 var focusGroup []string
+var isBlocking map[string]map[string]bool
 
 func main() {
 	currentlyExecuting = make(map[string]bool)
@@ -134,7 +141,8 @@ func main() {
 	check(err)
 
 	// map of id -> [list of followed ids]
-	followMap, err := getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
+	var followMap map[string][]string
+	followMap, isBlocking, err = getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
 	check(err)
 
 	idsToNames, err := getIdentities(args.fixturesRoot)
@@ -229,6 +237,9 @@ func main() {
 }
 
 func (p pair) batchConnect(idsToNames map[string]string) {
+	if isBlocking[p.dst][p.src] {
+		return
+	}
 	srcName, dstName := idsToNames[p.src], idsToNames[p.dst]
 	start([]string{srcName, dstName})
 	waitUntil(srcName, []string{srcName})
