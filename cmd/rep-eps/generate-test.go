@@ -157,13 +157,13 @@ func main() {
 	}
 
 	// Note: do not remove, it's a useful help function: )
-	// getIds := func (src []string) []string {
-	// 	extractedIds := make([]string, 0, len(src))
-	// 	for _, name := range src {
-	// 		extractedIds = append(extractedIds, namesToIDs[name])
-	// 	}
-	// 	return extractedIds
-	// }
+	getIds := func(src []string) []string {
+		extractedIds := make([]string, 0, len(src))
+		for _, name := range src {
+			extractedIds = append(extractedIds, namesToIDs[name])
+		}
+		return extractedIds
+	}
 
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
 	focusGroup = make([]string, args.focusedPuppets)
@@ -176,8 +176,33 @@ func main() {
 		focusGroup[i], focusGroup[j] = focusGroup[j], focusGroup[i]
 	})
 
-	// puppetIds := getUniques(expectations)
+	/* given our starting set of puppets, called focus, and hops = 3, we will want to generate
+	the following connection graph:
+	focus
+				-> hops 1 / direct follows
+						      -> hops 2
+												    -> hops 3
 
+			 =======================
+			  start start start start
+			v hops 3 connect hops 2 v
+			v hops 2 connect hops 1 v
+		  v hops 1 connect focus  v
+				done done  done done
+	*/
+	focusIds := getIds(focusGroup)
+	g := graph{followMap: followMap, seen: make(map[string]bool)}
+	var hopsPairs []pair
+	for _, id := range focusIds {
+		hopsPairs = append(hopsPairs, g.recurseFollows(id, 3)...)
+	}
+	// reverse hopsPairs, so that the pairs the furthest from a focus puppet are at the start of the slice
+	// this is important as we want to get as much data as possible when finally syncing the focus puppets
+	for i, j := 0, len(hopsPairs)-1; i < j; i, j = i+1, j-1 {
+		hopsPairs[i], hopsPairs[j] = hopsPairs[j], hopsPairs[i]
+	}
+
+	// init all puppets from the fixtures
 	// output `enter`, `load` stmts, sorted by puppet name
 	for _, puppetName := range puppetNames {
 		puppetId := namesToIDs[puppetName]
@@ -188,17 +213,10 @@ func main() {
 	// start the focus group
 	start(focusGroup)
 
-	// batch start, connect & disconnect from each focused puppet to the peers they are expected to replicate
-	// TODO: when this is confirmed to work, change the behaviour to only connect the followed peers (instead of all peers they are expected to
-	// replicate)
-	for _, focusedName := range focusGroup {
-		focusedId := namesToIDs[focusedName]
-		replicateeNames := getNames(followMap[focusedId])
-		batchConnect(focusedName, replicateeNames)
+	// go through each hops pair and connect them, starting with the pairs the furthest away from the focus peers
+	for _, pair := range hopsPairs {
+		pair.batchConnect(idsToNames)
 	}
-
-	// make sure focus group is running
-	start(focusGroup)
 
 	// output `has` stmts
 	for _, name := range focusGroup {
@@ -210,42 +228,15 @@ func main() {
 	fmt.Printf("comment total time: %d seconds\n", totalTime/1000)
 }
 
-// batching logic for connections from each focused puppet to their expected replicatees
-// TODO: make batching logic a lot smarter, so that we don't stop puppets until we know that they will no longer appear
-// in any future batches
-func batchConnect(issuer string, replicateeNames []string) {
-	var count int
-	var finished bool
-	var endRange int
-
-	for {
-		startRange := count * args.batchSize
-		endRange = (count + 1) * args.batchSize
-		if endRange >= len(replicateeNames) {
-			endRange = len(replicateeNames)
-			finished = true
-		}
-
-		var subset []string
-		for _, replicatee := range replicateeNames[startRange:endRange] {
-			if replicatee != issuer {
-				subset = append(subset, replicatee)
-			}
-		}
-
-		start(subset)
-		connect(issuer, subset)
-		waitUntil(issuer, subset)
-		disconnect(issuer, subset)
-		waitMs(500)
-		stop(subset)
-
-		if finished {
-			wait()
-			break
-		}
-		count += 1
-	}
+func (p pair) batchConnect(idsToNames map[string]string) {
+	srcName, dstName := idsToNames[p.src], idsToNames[p.dst]
+	start([]string{srcName, dstName})
+	waitUntil(srcName, []string{srcName})
+	connect(srcName, []string{dstName})
+	waitUntil(srcName, []string{dstName})
+	disconnect(srcName, []string{dstName})
+	waitMs(500)
+	stop([]string{srcName, dstName})
 }
 
 func has(issuer string, names []string) {
@@ -292,6 +283,36 @@ func stop(names []string) {
 			fmt.Printf("stop %s\n", name)
 		}
 	}
+}
+
+type pair struct {
+	src, dst string
+}
+
+type graph struct {
+	followMap map[string][]string
+	seen      map[string]bool
+}
+
+func (g graph) recurseFollows(id string, hopsLeft int) []pair {
+	g.seen[id] = true
+	if hopsLeft <= 0 {
+		return []pair{}
+	}
+	var pairs []pair
+	for _, otherId := range g.followMap[id] {
+		if g.seen[otherId] {
+			continue
+		}
+		pairs = append(pairs, pair{src: id, dst: otherId})
+	}
+	for _, otherId := range g.followMap[id] {
+		if g.seen[otherId] {
+			continue
+		}
+		pairs = append(pairs, g.recurseFollows(otherId, hopsLeft-1)...)
+	}
+	return pairs
 }
 
 func waitUntil(issuer string, names []string) {
