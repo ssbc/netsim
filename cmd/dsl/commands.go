@@ -179,16 +179,17 @@ func DoCreateHistoryStream(p Puppet, who string, n int, live bool) (string, erro
 
 	var response []string
 	ctx := context.TODO() // TODO get simulation context
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if !src.Next(ctx) {
 		if err := src.Err(); err != nil {
-			return "", err
+			return "", fmt.Errorf("createHistStream failed: %w", err)
 		}
 	}
 
 	err = src.Reader(prettyPrintSourceJSON(response))
 	if err != nil {
+		err = fmt.Errorf("failed to read body: %w (mux source error: %v)", err, src.Err())
 		return "", err
 	}
 
