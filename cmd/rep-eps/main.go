@@ -135,7 +135,7 @@ type runtimeArgs struct {
 
 func main() {
 	var args runtimeArgs
-	flag.IntVar(&args.maxHops, "hops", 3, "the default global hops setting")
+	flag.IntVar(&args.maxHops, "hops", 2, "the default global hops setting")
 	flag.BoolVar(&args.replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
 	flag.StringVar(&args.outpath, "out", "./expectations.json", "the filename and path where the expectations will be dumped")
 	flag.Parse()

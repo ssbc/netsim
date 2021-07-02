@@ -113,28 +113,27 @@ type runtimeArgs struct {
 	fixturesRoot     string
 	expectationsPath string
 	batchSize        int
-	waitDuration     int
 	focusedPuppets   int
+	maxHops          int
 }
 
 // uses:
 // * expectations.json
 // * root folder containing cmd&log-splicer processed fixtures
 var currentlyExecuting map[string]bool
-
-var args runtimeArgs
-
+var idsToNames map[string]string
 var focusGroup []string
 var isBlocking map[string]map[string]bool
+var args runtimeArgs
 
 func main() {
 	currentlyExecuting = make(map[string]bool)
 	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
 	flag.StringVar(&args.expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
 	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
+	flag.IntVar(&args.maxHops, "hops", 2, "the max hops count to use")
 	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
 	flag.IntVar(&args.batchSize, "batch", 3, "number of puppets to run concurrently")
-	flag.IntVar(&args.waitDuration, "wait", 2000, "the default wait duration")
 	flag.Parse()
 
 	expectations, err := readExpectations(args.expectationsPath)
@@ -145,7 +144,7 @@ func main() {
 	followMap, isBlocking, err = getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
 	check(err)
 
-	idsToNames, err := getIdentities(args.fixturesRoot)
+	idsToNames, err = getIdentities(args.fixturesRoot)
 	check(err)
 
 	puppetNames := make([]string, 0, len(idsToNames))
@@ -199,11 +198,12 @@ func main() {
 				done done  done done
 	*/
 	focusIds := getIds(focusGroup)
-	g := graph{followMap: followMap, seen: make(map[string]bool)}
 	var hopsPairs []pair
 	for _, id := range focusIds {
-		hopsPairs = append(hopsPairs, g.recurseFollows(id, 3)...)
+		g := graph{followMap: followMap, seen: make(map[string]bool)}
+		hopsPairs = append(hopsPairs, g.recurseFollows(id, args.maxHops)...)
 	}
+
 	// reverse hopsPairs, so that the pairs the furthest from a focus puppet are at the start of the slice
 	// this is important as we want to get as much data as possible when finally syncing the focus puppets
 	for i, j := 0, len(hopsPairs)-1; i < j; i, j = i+1, j-1 {
@@ -241,13 +241,15 @@ func (p pair) batchConnect(idsToNames map[string]string) {
 		return
 	}
 	srcName, dstName := idsToNames[p.src], idsToNames[p.dst]
-	start([]string{srcName, dstName})
+	batchPair := []string{srcName, dstName}
+	dst := []string{dstName}
+	start(batchPair)
 	waitUntil(srcName, []string{srcName})
-	connect(srcName, []string{dstName})
-	waitUntil(srcName, []string{dstName})
-	disconnect(srcName, []string{dstName})
-	waitMs(500)
-	stop([]string{srcName, dstName})
+	connect(srcName, dst)
+	waitUntil(srcName, dst)
+	disconnect(srcName, dst)
+	waitMs(1500)
+	stop(batchPair)
 }
 
 func has(issuer string, names []string) {
@@ -305,6 +307,10 @@ type graph struct {
 	seen      map[string]bool
 }
 
+// TODO: change pair to { src: string, dst: []string }?
+// the above ^ change can also take care of batching the dst's into correct sized buckets.
+// if len(dst) > SOME_MAX, then we push what we already have to the pairs slice and start populating a new slice of
+// destinations
 func (g graph) recurseFollows(id string, hopsLeft int) []pair {
 	g.seen[id] = true
 	if hopsLeft <= 0 {
@@ -337,9 +343,4 @@ var totalTime int
 func waitMs(ms int) {
 	totalTime += ms
 	fmt.Printf("wait %d\n", ms)
-}
-
-func wait() {
-	totalTime += args.waitDuration
-	fmt.Printf("wait %d\n", args.waitDuration)
 }
