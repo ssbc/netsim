@@ -551,7 +551,7 @@ func (s Simulator) execute() {
 			// TODO: re-evaluate need of sleeping after connection
 			// current need: make sure no puppet tries to hit the remote sbot too quickly (saw some error with like EOF
 			// something something)
-			sleeper.sleep(200 * time.Millisecond)
+			sleeper.sleep(500 * time.Millisecond)
 			s.evaluateRun(err)
 		case "has":
 			line := s.getInstructionArg(2)
@@ -686,6 +686,7 @@ func main() {
 	// monitor system interrupts via cmd-c/mod-c
 	sim.monitorInterrupts()
 
+	fmt.Println("TAP version 13")
 	lines := readTest(testfile)
 	sim.ParseTest(lines)
 	sim.execute()
