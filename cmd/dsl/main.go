@@ -40,10 +40,18 @@ type Puppet struct {
 	secretDir  string
 	omitOffset bool
 	process    Process // holds cmd & logfile of a running puppet process
+	totalTime  time.Duration
+	slept      time.Duration
+	lastStart  time.Time
 }
 
 func (p Puppet) String() string {
 	return fmt.Sprintf("[%s@%d] %s", p.name, p.seqno, p.feedID)
+}
+
+func (p *Puppet) addSleepDuration(d time.Duration) {
+	p.slept += d
+	fmt.Println(p.name, p.slept)
 }
 
 func (p *Puppet) start(s Simulator, shim string) error {
@@ -96,7 +104,7 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	return nil
 }
 
-func (p Puppet) stop() error {
+func (p *Puppet) stop() error {
 	cmd, logfile := p.process.cmd, p.process.logfile
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
 	// issue an interrupt to the process (allows us to do cleanup in sbots)
@@ -130,6 +138,10 @@ func (p Puppet) stop() error {
 
 func (p Puppet) usesFixtures() bool {
 	return len(p.feedID) > 0 && len(p.secretDir) > 0
+}
+
+func (p Puppet) isExecuting() bool {
+	return p.process != Process{}
 }
 
 func (p *Puppet) bumpSeqno() {
@@ -353,15 +365,24 @@ func (s *Simulator) acquirePort() int {
 
 type Sleeper struct {
 	elapsed time.Time
+	sim     Simulator
 }
 
 func (s *Sleeper) sleep(d time.Duration) {
 	s.elapsed = s.elapsed.Add(d)
 	time.Sleep(d)
+	// iterate through puppets & record sleep duration for those currently running at time of sleep
+	for name, puppet := range s.sim.puppetMap {
+		if puppet.isExecuting() {
+			puppet.addSleepDuration(d)
+			s.sim.puppetMap[name] = puppet
+		}
+	}
 }
 
 func (s Simulator) execute() {
 	var sleeper Sleeper
+	sleeper.sim = s
 	start := time.Now()
 	for _, instr := range s.instructions {
 		// check if we have received any cancellations before continuing on to process test commands
@@ -464,6 +485,7 @@ func (s Simulator) execute() {
 				}
 				p.feedID = feedID
 			}
+			p.lastStart = time.Now()
 			s.puppetMap[name] = p
 
 			instr.TestSuccess()
@@ -476,6 +498,9 @@ func (s Simulator) execute() {
 			if err != nil {
 				s.Abort(err)
 			}
+			p.totalTime += time.Since(p.lastStart)
+			s.puppetMap[name] = p
+			taplog(fmt.Sprintf("current total time for %s: %s", p.name, p.totalTime))
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
@@ -585,8 +610,7 @@ func (s Simulator) execute() {
 		}
 	}
 
-	end := time.Now()
-	elapsed := end.Sub(start)
+	elapsed := time.Since(start)
 	var t time.Time
 	t = t.Add(elapsed)
 	cpuTime := t.Sub(sleeper.elapsed)
@@ -649,6 +673,11 @@ func (s Simulator) monitorInterrupts() {
 func (s Simulator) exit() {
 	taplog("Closing all puppets")
 	s.cancelExecution()
+	taplog("puppet\ttotal time\tactive time")
+	for name, puppet := range s.puppetMap {
+		activeTime := puppet.totalTime - puppet.slept
+		taplog(fmt.Sprintf("%s\t\t%s\t%s", name, puppet.totalTime, activeTime))
+	}
 	time.Sleep(1 * time.Second)
 }
 
