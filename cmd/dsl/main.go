@@ -164,7 +164,7 @@ type FixturesFeedInfo struct {
 }
 
 type Simulator struct {
-	puppetMap map[string]Puppet
+	puppetMap map[string]*Puppet
 	// map of pubkey: {latest: int, folder: string}.
 	// `folder` is the spliced-out fixtures subfolder containing the secret + log.offset for pubkey
 	fixturesIds     map[string]FixturesFeedInfo
@@ -189,7 +189,7 @@ func bail(msg string) {
 }
 
 func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
-	puppetMap := make(map[string]Puppet)
+	puppetMap := make(map[string]*Puppet)
 	langMap := make(map[string]string)
 	fixturesIdsMap := make(map[string]FixturesFeedInfo)
 
@@ -285,11 +285,11 @@ func (s Simulator) getFixturesLatestSeqno(id string) int {
 	return info.Latest
 }
 
-func (s Simulator) getSrcPuppet() Puppet {
+func (s Simulator) getSrcPuppet() *Puppet {
 	return s.getPuppet(s.instr.getSrc())
 }
 
-func (s Simulator) getDstPuppet() Puppet {
+func (s Simulator) getDstPuppet() *Puppet {
 	return s.getPuppet(s.instr.getDst())
 }
 
@@ -372,10 +372,9 @@ func (s *Sleeper) sleep(d time.Duration) {
 	s.elapsed = s.elapsed.Add(d)
 	time.Sleep(d)
 	// iterate through puppets & record sleep duration for those currently running at time of sleep
-	for name, puppet := range s.sim.puppetMap {
+	for _, puppet := range s.sim.puppetMap {
 		if puppet.isExecuting() {
 			puppet.addSleepDuration(d)
-			s.sim.puppetMap[name] = puppet
 		}
 	}
 }
@@ -405,7 +404,7 @@ func (s Simulator) execute() {
 				caps: s.caps,
 				hops: s.hops,
 			}
-			s.puppetMap[name] = p
+			s.puppetMap[name] = &p
 			instr.TestSuccess()
 		case "load":
 			if s.fixtures == "" {
@@ -419,13 +418,11 @@ func (s Simulator) execute() {
 			p.secretDir = s.getSecretDir(id)
 			p.seqno = s.getFixturesLatestSeqno(id)
 			p.feedID = id
-			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "skipoffset":
 			name := s.getInstructionArg(1)
 			p := s.getPuppet(name)
 			p.omitOffset = true
-			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "hops":
 			name := s.getInstructionArg(1)
@@ -437,7 +434,6 @@ func (s Simulator) execute() {
 			}
 			p := s.getPuppet(name)
 			p.hops = hops
-			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "caps":
 			name := s.getInstructionArg(1)
@@ -450,7 +446,6 @@ func (s Simulator) execute() {
 			}
 			p := s.getPuppet(name)
 			p.caps = caps
-			s.puppetMap[name] = p
 			instr.TestSuccess()
 		case "start":
 			name := s.getInstructionArg(1)
@@ -486,7 +481,6 @@ func (s Simulator) execute() {
 				p.feedID = feedID
 			}
 			p.lastStart = time.Now()
-			s.puppetMap[name] = p
 
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
@@ -499,7 +493,6 @@ func (s Simulator) execute() {
 				s.Abort(err)
 			}
 			p.totalTime += time.Since(p.lastStart)
-			s.puppetMap[name] = p
 			taplog(fmt.Sprintf("current total time for %s: %s", p.name, p.totalTime))
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
@@ -628,7 +621,7 @@ func (s Simulator) Abort(err error) {
 	s.exit()
 }
 
-func (s Simulator) getPuppet(name string) Puppet {
+func (s Simulator) getPuppet(name string) *Puppet {
 	p, exists := s.puppetMap[name]
 	if !exists {
 		s.Abort(errors.New(fmt.Sprintf("fatal: there is no puppet declared as %s\n# possible fix: add `enter %s` before other statements", name, name)))

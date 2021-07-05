@@ -13,7 +13,7 @@ func trimFeedId(feedID string) string {
 	return strings.ReplaceAll(s, ".ed25519", "")
 }
 
-func multiserverAddr(p Puppet) string {
+func multiserverAddr(p *Puppet) string {
 	// format: net:localhost:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
 	ip := "localhost"
 	return fmt.Sprintf("net:%s:%d~shs:%s", ip, p.Port, trimFeedId(p.feedID))
