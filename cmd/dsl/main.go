@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -49,9 +50,17 @@ func (p Puppet) String() string {
 	return fmt.Sprintf("[%s@%d] %s", p.name, p.seqno, p.feedID)
 }
 
+func (p *Puppet) stopTimer() {
+	if p.lastStart.IsZero() {
+		return
+	}
+	p.totalTime += time.Since(p.lastStart)
+	var zero time.Time
+	p.lastStart = zero
+}
+
 func (p *Puppet) addSleepDuration(d time.Duration) {
 	p.slept += d
-	fmt.Println(p.name, p.slept)
 }
 
 func (p *Puppet) start(s Simulator, shim string) error {
@@ -462,6 +471,7 @@ func (s Simulator) execute() {
 			p.directory = fullpath
 
 			err := p.start(s, langImpl)
+			p.lastStart = time.Now()
 			if err != nil {
 				instr.TestFailure(err)
 				continue
@@ -480,8 +490,6 @@ func (s Simulator) execute() {
 				}
 				p.feedID = feedID
 			}
-			p.lastStart = time.Now()
-
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
@@ -492,8 +500,7 @@ func (s Simulator) execute() {
 			if err != nil {
 				s.Abort(err)
 			}
-			p.totalTime += time.Since(p.lastStart)
-			taplog(fmt.Sprintf("current total time for %s: %s", p.name, p.totalTime))
+			p.stopTimer()
 			instr.TestSuccess()
 			taplog(fmt.Sprintf("%s has been stopped", name))
 		case "log":
@@ -663,14 +670,31 @@ func (s Simulator) monitorInterrupts() {
 	}()
 }
 
+func (s Simulator) logMetrics() {
+	fmtString := "%-12s %12s %12s"
+	taplog(fmt.Sprintf(fmtString, "Puppet", "Total time", "Active time"))
+	puppets := make([]*Puppet, 0, len(s.puppetMap))
+	for _, puppet := range s.puppetMap {
+		if puppet.isExecuting() {
+			puppet.stopTimer()
+		}
+		puppets = append(puppets, puppet)
+	}
+	// sort puppets by total time descending
+	sort.Slice(puppets, func(i, j int) bool {
+		return puppets[i].totalTime.Milliseconds() > puppets[j].totalTime.Milliseconds()
+	})
+	for _, puppet := range puppets {
+		total := puppet.totalTime.Truncate(time.Millisecond)
+		active := (puppet.totalTime - puppet.slept).Truncate(time.Millisecond)
+		taplog(fmt.Sprintf(fmtString, puppet.name, total, active))
+	}
+}
+
 func (s Simulator) exit() {
 	taplog("Closing all puppets")
 	s.cancelExecution()
-	taplog("puppet\ttotal time\tactive time")
-	for name, puppet := range s.puppetMap {
-		activeTime := puppet.totalTime - puppet.slept
-		taplog(fmt.Sprintf("%s\t\t%s\t%s", name, puppet.totalTime, activeTime))
-	}
+	s.logMetrics()
 	time.Sleep(1 * time.Second)
 }
 
