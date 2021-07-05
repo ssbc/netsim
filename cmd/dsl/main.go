@@ -503,7 +503,21 @@ func (s Simulator) execute() {
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
-			message, err := DoWaitUntil(srcPuppet, dstPuppet, seq)
+			MAX_RETRIES := 10
+			var err error
+			var message string
+			// kludge: we've been having rare issues of go-muxrpc failing on the waituntil command.  this kludge simply
+			// retries any failures, as the call is generally likely to succeed. typically, we only saw a failure once in a
+			// ~416 line netsim test.
+			for retries := 0; retries < MAX_RETRIES; retries++ {
+				message, err = DoWaitUntil(srcPuppet, dstPuppet, seq)
+				if err == nil {
+					break
+				} else {
+					taplog(fmt.Sprintf("waituntil had an error! on retry attempt %d/%d", retries+1, MAX_RETRIES))
+					sleeper.sleep(1 * time.Second)
+				}
+			}
 			s.evaluateRun(err)
 			if err == nil {
 				taplog(message)
