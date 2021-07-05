@@ -26,7 +26,7 @@ type Latest struct {
 	TS       int
 }
 
-func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{}) error {
+func asyncRequest(p *Puppet, method muxrpc.Method, payload, response interface{}) error {
 	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func asyncRequest(p Puppet, method muxrpc.Method, payload, response interface{})
 	return nil
 }
 
-func sourceRequest(p Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
+func sourceRequest(p *Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
 	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return nil, nil, err
@@ -57,14 +57,14 @@ func sourceRequest(p Puppet, method muxrpc.Method, opts interface{}) (muxrpc.End
 	return c, src, err
 }
 
-func DoConnect(src, dst Puppet) error {
+func DoConnect(src, dst *Puppet) error {
 	dstMultiAddr := multiserverAddr(dst)
 
 	var response interface{}
 	return asyncRequest(src, muxrpc.Method{"conn", "connect"}, dstMultiAddr, &response)
 }
 
-func DoDisconnect(src, dst Puppet) error {
+func DoDisconnect(src, dst *Puppet) error {
 	dstMultiAddr := multiserverAddr(dst)
 
 	var response interface{}
@@ -72,7 +72,7 @@ func DoDisconnect(src, dst Puppet) error {
 }
 
 // TODO: use createLogStream opts here, as we use them in DoLog?
-func queryLatest(p Puppet) ([]Latest, error) {
+func queryLatest(p *Puppet) ([]Latest, error) {
 	var empty interface{}
 	c, src, err := sourceRequest(p, muxrpc.Method{"replicate", "upto"}, empty)
 	if err != nil {
@@ -100,7 +100,7 @@ func queryLatest(p Puppet) ([]Latest, error) {
 	return seqnos, nil
 }
 
-func extractSeqno(dst Puppet, seqno string) (int, string, error) {
+func extractSeqno(dst *Puppet, seqno string) (int, string, error) {
 	var assertedSeqno int
 	var assumption string
 	if seqno == "latest" {
@@ -118,7 +118,7 @@ func extractSeqno(dst Puppet, seqno string) (int, string, error) {
 }
 
 // really bad Rammstein pun, sorry (absolutely not sorry)
-func DoHast(src, dst Puppet, seqno string) (string, error) {
+func DoHast(src, dst *Puppet, seqno string) (string, error) {
 	srcLatestSeqs, err := queryLatest(src)
 	if err != nil {
 		return "", err
@@ -140,7 +140,7 @@ func DoHast(src, dst Puppet, seqno string) (string, error) {
 	}
 }
 
-func DoWaitUntil(src, dst Puppet, seqno string) (string, error) {
+func DoWaitUntil(src, dst *Puppet, seqno string) (string, error) {
 	assertedSeqno, message, err := extractSeqno(dst, seqno)
 	if err != nil {
 		return "", err
@@ -156,7 +156,7 @@ func DoWaitUntil(src, dst Puppet, seqno string) (string, error) {
 	return message, nil
 }
 
-func DoCreateHistoryStream(p Puppet, who string, n int, live bool) (string, error) {
+func DoCreateHistoryStream(p *Puppet, who string, n int, live bool) (string, error) {
 	type histOptions struct {
 		ID    string `json:"id"`
 		Seq   int    `json:"seq"`
@@ -196,7 +196,7 @@ func DoCreateHistoryStream(p Puppet, who string, n int, live bool) (string, erro
 	return strings.Join(response, "\n"), nil
 }
 
-func DoWhoami(p Puppet) (string, error) {
+func DoWhoami(p *Puppet) (string, error) {
 	var parsed Whoami
 	var empty interface{}
 	err := asyncRequest(p, muxrpc.Method{"whoami"}, &empty, &parsed)
@@ -206,7 +206,7 @@ func DoWhoami(p Puppet) (string, error) {
 	return parsed.ID.Ref(), nil
 }
 
-func DoLog(p Puppet, n int) (string, error) {
+func DoLog(p *Puppet, n int) (string, error) {
 	type sourceOptions struct {
 		Limit   int  `json:"limit"`
 		Reverse bool `json:"reverse"`
@@ -258,7 +258,7 @@ func prettyPrintSourceJSON(response []string) func(rd io.Reader) error {
 	}
 }
 
-func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
+func DoFollow(srcPuppet, dstPuppet *Puppet, isFollow bool) error {
 	feedRef, err := refs.ParseFeedRef(dstPuppet.feedID)
 	if err != nil {
 		return err
@@ -272,19 +272,19 @@ func DoFollow(srcPuppet, dstPuppet Puppet, isFollow bool) error {
 	return err
 }
 
-func DoPost(p Puppet) error {
+func DoPost(p *Puppet) error {
 	post := refs.NewPost("bep")
 
 	var response string
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 
-func DoPublish(p Puppet, post map[string]interface{}) error {
+func DoPublish(p *Puppet, post map[string]interface{}) error {
 	var response string
 	return asyncRequest(p, muxrpc.Method{"publish"}, post, &response)
 }
 
-func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
+func queryIsFollowing(srcPuppet, dstPuppet *Puppet) (bool, error) {
 	srcRef, err := refs.ParseFeedRef(srcPuppet.feedID)
 	if err != nil {
 		return false, err
@@ -307,7 +307,7 @@ func queryIsFollowing(srcPuppet, dstPuppet Puppet) (bool, error) {
 	return response.(bool), nil
 }
 
-func DoIsFollowing(srcPuppet, dstPuppet Puppet) error {
+func DoIsFollowing(srcPuppet, dstPuppet *Puppet) error {
 	isFollowing, err := queryIsFollowing(srcPuppet, dstPuppet)
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ func DoIsFollowing(srcPuppet, dstPuppet Puppet) error {
 	return nil
 }
 
-func DoIsNotFollowing(srcPuppet, dstPuppet Puppet) error {
+func DoIsNotFollowing(srcPuppet, dstPuppet *Puppet) error {
 	isFollowing, err := queryIsFollowing(srcPuppet, dstPuppet)
 	if err != nil {
 		return err
