@@ -27,7 +27,7 @@ type Latest struct {
 }
 
 func asyncRequest(p *Puppet, method muxrpc.Method, payload, response interface{}) error {
-	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
+	c, err := client.NewTCP(p.port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func asyncRequest(p *Puppet, method muxrpc.Method, payload, response interface{}
 }
 
 func sourceRequest(p *Puppet, method muxrpc.Method, opts interface{}) (muxrpc.Endpoint, *muxrpc.ByteSource, error) {
-	c, err := client.NewTCP(p.Port, p.caps, fmt.Sprintf("%s/secret", p.directory))
+	c, err := client.NewTCP(p.port, p.caps, fmt.Sprintf("%s/secret", p.directory))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -71,7 +71,6 @@ func DoDisconnect(src, dst *Puppet) error {
 	return asyncRequest(src, muxrpc.Method{"conn", "disconnect"}, dstMultiAddr, &response)
 }
 
-// TODO: use createLogStream opts here, as we use them in DoLog?
 func queryLatest(p *Puppet) ([]Latest, error) {
 	var empty interface{}
 	c, src, err := sourceRequest(p, muxrpc.Method{"replicate", "upto"}, empty)

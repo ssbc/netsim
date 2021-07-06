@@ -133,7 +133,6 @@ func main() {
 	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
 	flag.IntVar(&args.maxHops, "hops", 2, "the max hops count to use")
 	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
-	flag.IntVar(&args.batchSize, "batch", 3, "number of puppets to run concurrently")
 	flag.Parse()
 
 	expectations, err := readExpectations(args.expectationsPath)
@@ -248,7 +247,6 @@ func (p pair) batchConnect(idsToNames map[string]string) {
 	connect(srcName, dst)
 	waitUntil(srcName, dst)
 	disconnect(srcName, dst)
-	waitMs(1500)
 	stop(batchPair)
 }
 
