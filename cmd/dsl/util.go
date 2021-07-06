@@ -16,7 +16,7 @@ func trimFeedId(feedID string) string {
 func multiserverAddr(p *Puppet) string {
 	// format: net:localhost:18889~shs:xDPgE3tTTIwkt1po+2GktzdvwJLS37ZEd+TZzIs66UU=
 	ip := "localhost"
-	return fmt.Sprintf("net:%s:%d~shs:%s", ip, p.Port, trimFeedId(p.feedID))
+	return fmt.Sprintf("net:%s:%d~shs:%s", ip, p.port, trimFeedId(p.feedID))
 }
 
 func taplog(str string) {

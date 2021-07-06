@@ -31,20 +31,20 @@ type Process struct {
 }
 
 type Puppet struct {
-	Port          int
 	directory     string
 	feedID        string
 	name          string
 	caps          string
-	hops          int
-	seqno         int
 	secretDir     string
 	omitOffset    bool
-	process       Process // holds cmd & logfile of a running puppet process
+	port          int
+	hops          int
+	seqno         int
 	totalMessages int
 	totalTime     time.Duration
 	slept         time.Duration
 	lastStart     time.Time
+	process       Process // holds cmd & logfile of a running puppet process
 }
 
 func (p Puppet) String() string {
@@ -94,7 +94,7 @@ func (p *Puppet) start(s Simulator, shim string) error {
 	// sim-shim.sh contains logic for starting the corresponding sbot correctly.
 	// e.g. reading the passed in ssb directory ($1) and port ($2)
 	shimPath := filepath.Join(s.implementations[shim], "sim-shim.sh")
-	cmd = exec.CommandContext(s.rootCtx, shimPath, p.directory, strconv.Itoa(p.Port))
+	cmd = exec.CommandContext(s.rootCtx, shimPath, p.directory, strconv.Itoa(p.port))
 
 	// the environment variables CAPS and HOPS contains the caps (default: ssb caps) and hops (default: 2) settings for
 	// the puppet, and must be set correctly in each implementation's sim-shim.sh
@@ -138,12 +138,11 @@ func (p *Puppet) stop() error {
 		cmd.Process.Signal(os.Interrupt)
 	}
 
-	// TODO: re-enable once the test generation is confirmed to work for large batches
 	// last resort shutdown
-	// go func() {
-	// 	time.Sleep(2 * time.Second)
-	// 	_ = cmd.Process.Signal(os.Kill)
-	// }()
+	go func() {
+		time.Sleep(2 * time.Second)
+		_ = cmd.Process.Signal(os.Kill)
+	}()
 
 	// wait for the process to wrap up
 	err := cmd.Wait()
@@ -403,8 +402,7 @@ func (s *Sleeper) sleep(d time.Duration) {
 }
 
 func (s Simulator) execute() {
-	var sleeper Sleeper
-	sleeper.sim = s
+	sleeper := Sleeper{sim: s}
 	start := time.Now()
 	for _, instr := range s.instructions {
 		// check if we have received any cancellations before continuing on to process test commands
@@ -481,7 +479,7 @@ func (s Simulator) execute() {
 			p := s.getPuppet(name)
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
 			fullpath := filepath.Join(s.puppetDir, subfolder)
-			p.Port = s.acquirePort()
+			p.port = s.acquirePort()
 			p.directory = fullpath
 
 			err := p.start(s, langImpl)
@@ -559,6 +557,7 @@ func (s Simulator) execute() {
 			}
 			s.evaluateRun(err)
 			if err == nil {
+				// the message we get back is of the type "interpreting <name>@latest as <name>@<seqno>"
 				taplog(message)
 			}
 		case "unfollow":
@@ -615,6 +614,7 @@ func (s Simulator) execute() {
 			message, err := DoHast(srcPuppet, dstPuppet, seq)
 			s.evaluateRun(err)
 			if err == nil {
+				// the message we get back is of the type "interpreting <name>@latest as <name>@<seqno>"
 				taplog(message)
 			}
 		default:
@@ -623,7 +623,6 @@ func (s Simulator) execute() {
 			continue
 		}
 	}
-
 	fmt.Printf("1..%d\n", len(s.instructions))
 
 	elapsed := time.Since(start)
