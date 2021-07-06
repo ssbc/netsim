@@ -31,19 +31,20 @@ type Process struct {
 }
 
 type Puppet struct {
-	Port       int
-	directory  string
-	feedID     string
-	name       string
-	caps       string
-	hops       int
-	seqno      int
-	secretDir  string
-	omitOffset bool
-	process    Process // holds cmd & logfile of a running puppet process
-	totalTime  time.Duration
-	slept      time.Duration
-	lastStart  time.Time
+	Port          int
+	directory     string
+	feedID        string
+	name          string
+	caps          string
+	hops          int
+	seqno         int
+	secretDir     string
+	omitOffset    bool
+	process       Process // holds cmd & logfile of a running puppet process
+	totalMessages int
+	totalTime     time.Duration
+	slept         time.Duration
+	lastStart     time.Time
 }
 
 func (p Puppet) String() string {
@@ -57,6 +58,17 @@ func (p *Puppet) stopTimer() {
 	p.totalTime += time.Since(p.lastStart)
 	var zero time.Time
 	p.lastStart = zero
+}
+
+func (p *Puppet) countMessages() {
+	seqnos, err := queryLatest(p)
+	if err == nil {
+		count := 0
+		for _, seqno := range seqnos {
+			count += seqno.Sequence
+		}
+		p.totalMessages = count
+	}
 }
 
 func (p *Puppet) addSleepDuration(d time.Duration) {
@@ -114,6 +126,8 @@ func (p *Puppet) start(s Simulator, shim string) error {
 }
 
 func (p *Puppet) stop() error {
+	// update the total message count before we stop this puppet
+	p.countMessages()
 	cmd, logfile := p.process.cmd, p.process.logfile
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
 	// issue an interrupt to the process (allows us to do cleanup in sbots)
@@ -610,6 +624,8 @@ func (s Simulator) execute() {
 		}
 	}
 
+	fmt.Printf("1..%d\n", len(s.instructions))
+
 	elapsed := time.Since(start)
 	var t time.Time
 	t = t.Add(elapsed)
@@ -619,8 +635,6 @@ func (s Simulator) execute() {
 	taplog(fmt.Sprintf("Total time: %s", elapsed.String()))
 	taplog(fmt.Sprintf("Active time: %s", cpuTime.String()))
 	taplog(fmt.Sprintf("Puppet count: %d", len(s.puppetMap)))
-
-	fmt.Printf("1..%d\n", len(s.instructions))
 }
 
 func (s Simulator) Abort(err error) {
@@ -671,12 +685,15 @@ func (s Simulator) monitorInterrupts() {
 }
 
 func (s Simulator) logMetrics() {
-	fmtString := "%-12s %12s %12s"
-	taplog(fmt.Sprintf(fmtString, "Puppet", "Total time", "Active time"))
+	fmtString := "%-12s %12s %12s %12s"
+	taplog(fmt.Sprintf(fmtString, "Puppet", "Total time", "Active time", "# messages"))
 	puppets := make([]*Puppet, 0, len(s.puppetMap))
+	// put all puppets into a slice so for later sortability, and stop the timers of running puppets
 	for _, puppet := range s.puppetMap {
+		// if a puppet is still running after the last test has been executed, we need to stop its timer manually
 		if puppet.isExecuting() {
 			puppet.stopTimer()
+			puppet.countMessages()
 		}
 		puppets = append(puppets, puppet)
 	}
@@ -684,17 +701,19 @@ func (s Simulator) logMetrics() {
 	sort.Slice(puppets, func(i, j int) bool {
 		return puppets[i].totalTime.Milliseconds() > puppets[j].totalTime.Milliseconds()
 	})
+	// print the time metrics
 	for _, puppet := range puppets {
 		total := puppet.totalTime.Truncate(time.Millisecond)
 		active := (puppet.totalTime - puppet.slept).Truncate(time.Millisecond)
-		taplog(fmt.Sprintf(fmtString, puppet.name, total, active))
+		count := strconv.Itoa(puppet.totalMessages)
+		taplog(fmt.Sprintf(fmtString, puppet.name, total, active, count))
 	}
 }
 
 func (s Simulator) exit() {
+	s.logMetrics()
 	taplog("Closing all puppets")
 	s.cancelExecution()
-	s.logMetrics()
 	time.Sleep(1 * time.Second)
 }
 
