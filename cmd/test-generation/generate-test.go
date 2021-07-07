@@ -184,17 +184,15 @@ func main() {
 
 	/* given our starting set of puppets, called focus, and hops = 3, we will want to generate
 	the following connection graph:
-	focus
-				-> hops 1 / direct follows
-						      -> hops 2
-												    -> hops 3
+	focus -> hops 1 -> hops 2 -> hops 3
 
-			 =======================
+			 ========================
 			  start start start start
 			v hops 3 connect hops 2 v
 			v hops 2 connect hops 1 v
-		  v hops 1 connect focus  v
-				done done  done done
+			v hops 1 connect focus  v
+			  done done  done done
+			 ========================
 	*/
 	focusIds := getIds(focusGroup)
 	var hopsPairs []pair

@@ -1,4 +1,5 @@
-// Prints out a follow graph, as seen from the point of view of the focused peers
+// Prints out a follow graph, as seen from the point of view of the focused peers.
+// This command is literally a pared down version of generate-test.go
 package main
 
 import (
@@ -119,20 +120,6 @@ func main() {
 		focusGroup[i], focusGroup[j] = focusGroup[j], focusGroup[i]
 	})
 
-	/* given our starting set of puppets, called focus, and hops = 3, we will want to generate
-	the following connection graph:
-	focus
-				-> hops 1 / direct follows
-						      -> hops 2
-												    -> hops 3
-
-			 =======================
-			  start start start start
-			v hops 3 connect hops 2 v
-			v hops 2 connect hops 1 v
-		  v hops 1 connect focus  v
-				done done  done done
-	*/
 	getIds := func(src []string) []string {
 		extractedIds := make([]string, 0, len(src))
 		for _, name := range src {
