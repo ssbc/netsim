@@ -1,3 +1,6 @@
-# vim
 .*.sw[a-z]
+*.diff
+*.txt
+*.json
+*.tar.gz
 fixtures-output
