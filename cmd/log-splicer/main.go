@@ -136,15 +136,22 @@ func copySecret(identityFolder string, b []byte) error {
 }
 
 func copyFile(src, outdir string) error {
-	// read the file
-	b, err := os.ReadFile(src)
+	// open a file descriptor to the src file (in read only mode)
+	srcfile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
+
+	// prepare the destination file to be written to
 	filename := filepath.Base(src)
 	dst := filepath.Join(outdir, filename)
-	// write the file
-	err = os.WriteFile(dst, b, 0600)
+	dstfile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	// note: io.Copy copies INTO dst from src (think dst := src), without buffering contents to ram
+	_, err = io.Copy(dstfile, srcfile)
 	return err
 }
 
