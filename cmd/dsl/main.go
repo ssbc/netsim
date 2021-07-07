@@ -180,6 +180,10 @@ func (t TestError) Error() string {
 	return t.message + ": " + t.err.Error()
 }
 
+func (t TestError) Unwrap() error {
+	return t.err
+}
+
 type FixturesFeedInfo struct {
 	Folder string `json:"folder"`
 	Latest int    `json:"latest"`
