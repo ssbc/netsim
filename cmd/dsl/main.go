@@ -60,15 +60,17 @@ func (p *Puppet) stopTimer() {
 	p.lastStart = zero
 }
 
-func (p *Puppet) countMessages() {
+func (p *Puppet) countMessages() error {
 	seqnos, err := queryLatest(p)
-	if err == nil {
-		count := 0
-		for _, seqno := range seqnos {
-			count += seqno.Sequence
-		}
-		p.totalMessages = count
+	if err != nil {
+		return err
 	}
+	count := 0
+	for _, seqno := range seqnos {
+		count += seqno.Sequence
+	}
+	p.totalMessages = count
+	return nil
 }
 
 func (p *Puppet) addSleepDuration(d time.Duration) {
@@ -127,7 +129,10 @@ func (p *Puppet) start(s Simulator, shim string) error {
 
 func (p *Puppet) stop() error {
 	// update the total message count before we stop this puppet
-	p.countMessages()
+	err := p.countMessages()
+	if err != nil {
+		taplog(fmt.Sprintf("%s had an error when trying to count db messages (%s)", p.name, err))
+	}
 	cmd, logfile := p.process.cmd, p.process.logfile
 	taplog(fmt.Sprintf("stopping %s (%s)", p.name, p.feedID))
 	// issue an interrupt to the process (allows us to do cleanup in sbots)
@@ -145,7 +150,7 @@ func (p *Puppet) stop() error {
 	}()
 
 	// wait for the process to wrap up
-	err := cmd.Wait()
+	err = cmd.Wait()
 	if err != nil {
 		return TestError{err: err, message: fmt.Sprintf("failure when stopping puppet")}
 	}
@@ -696,7 +701,10 @@ func (s Simulator) logMetrics() {
 		// if a puppet is still running after the last test has been executed, we need to stop its timer manually
 		if puppet.isExecuting() {
 			puppet.stopTimer()
-			puppet.countMessages()
+			err := puppet.countMessages()
+			if err != nil {
+				taplog(fmt.Sprintf("%s had an error when trying to count db messages (%s)", puppet.name, err))
+			}
 		}
 		puppets = append(puppets, puppet)
 	}
