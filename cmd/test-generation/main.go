@@ -22,14 +22,14 @@ type peer struct {
 	blocked map[string]bool
 }
 
-func makePeer(args runtimeArgs, id string) peer {
+func makePeer(args Args, id string) peer {
 	p := peer{id: id}
-	p.hops = make([][]string, args.maxHops+1)
+	p.hops = make([][]string, args.MaxHops+1)
 	p.blocked = make(map[string]bool)
 	return p
 }
 
-func populateHopsAt(args runtimeArgs, count int, peers map[string]peer) {
+func populateHopsAt(args Args, count int, peers map[string]peer) {
 	for _, my := range peers {
 		for _, friendId := range my.hops[count-1] {
 			friend := peers[friendId]
@@ -38,7 +38,7 @@ func populateHopsAt(args runtimeArgs, count int, peers map[string]peer) {
 			}
 			for _, hopsFollow := range friend.hops[count-1] {
 				// don't add blocked peers to hops
-				if _, exists := my.blocked[hopsFollow]; exists && !args.replicateBlocked {
+				if _, exists := my.blocked[hopsFollow]; exists && !args.ReplicateBlocked {
 					continue
 				}
 				my.hops[count] = append(my.hops[count], hopsFollow)
@@ -48,11 +48,11 @@ func populateHopsAt(args runtimeArgs, count int, peers map[string]peer) {
 }
 
 // TODO: should we include hops[0]? i.e. the peer we are inspecting
-func collapse(args runtimeArgs, peers map[string]peer, blocked map[string]map[string]bool) {
+func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bool) {
 	// prune out duplicates when collapsing the map
 	collapsedHops := make(map[string]map[string]bool)
 	for id, p := range peers {
-		for i := 0; i <= args.maxHops; i++ {
+		for i := 0; i <= args.MaxHops; i++ {
 			collapsedHops[id] = make(map[string]bool)
 			for _, otherId := range p.hops[i] {
 				collapsedHops[id][otherId] = true
@@ -65,7 +65,7 @@ func collapse(args runtimeArgs, peers map[string]peer, blocked map[string]map[st
 	for id, others := range collapsedHops {
 		for otherId := range others {
 			// otherId has blocked id -> we should not expect to replicate them
-			if blocked[otherId][id] && !args.replicateBlocked {
+			if blocked[otherId][id] && !args.ReplicateBlocked {
 				continue
 			}
 			outputMap[id] = append(outputMap[id], otherId)
@@ -75,7 +75,7 @@ func collapse(args runtimeArgs, peers map[string]peer, blocked map[string]map[st
 	// persist to disk
 	b, err := json.MarshalIndent(outputMap, "", "  ")
 	check(err)
-	err = os.WriteFile(pathAndFile(args.outpath, "expectations.json"), b, 0666)
+	err = os.WriteFile(pathAndFile(args.Outpath, "expectations.json"), b, 0666)
 	check(err)
 }
 
@@ -86,7 +86,10 @@ func pathAndFile(dirpath, name string) string {
 	return path.Join(dirpath, name)
 }
 
-func produceExpectations(args runtimeArgs, graphpath string) {
+// TO DO:
+// * pass in fixturesRoot and use that to derive graphpath
+// * ProduceExpectations should output a string? or path to written file?
+func ProduceExpectations(args Args, graphpath string) {
 	b, err := os.ReadFile(graphpath)
 	check(err)
 
@@ -119,25 +122,25 @@ func produceExpectations(args runtimeArgs, graphpath string) {
 		peers[id] = p
 	}
 
-	if args.maxHops >= 2 {
-		for i := 2; i <= args.maxHops; i++ {
+	if args.MaxHops >= 2 {
+		for i := 2; i <= args.MaxHops; i++ {
 			populateHopsAt(args, i, peers)
 		}
 	}
 	collapse(args, peers, blocked)
 }
 
-type runtimeArgs struct {
-	maxHops          int
-	replicateBlocked bool
-	outpath          string
+type Args struct {
+	MaxHops          int
+	ReplicateBlocked bool
+	Outpath          string
 }
 
 func main() {
-	var args runtimeArgs
-	flag.IntVar(&args.maxHops, "hops", 2, "the default global hops setting")
-	flag.BoolVar(&args.replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
-	flag.StringVar(&args.outpath, "out", "./expectations.json", "the filename and path where the expectations will be dumped")
+	var args Args
+	flag.IntVar(&args.MaxHops, "hops", 2, "the default global hops setting")
+	flag.BoolVar(&args.ReplicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
+	flag.StringVar(&args.Outpath, "out", "./expectations.json", "the filename and path where the expectations will be dumped")
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
@@ -146,5 +149,5 @@ func main() {
 	}
 
 	graphpath := pathAndFile(flag.Args()[0], "follow-graph.json")
-	produceExpectations(args, graphpath)
+	ProduceExpectations(args, graphpath)
 }
