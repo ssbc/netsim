@@ -210,34 +210,24 @@ func checkLogEmpty(logpath string, removeExistingLogs bool) error {
 * version of their log.offset representation. inside each folder, dump the correct secret as well
  */
 
-func spliceLogs(args runtimeArgs) error {
-
+func SpliceLogs(args Args) error {
 	var err error
 	var input margaret.Log
 
-	logpaths := flag.Args()
-	if len(logpaths) != 2 {
-		cmdName := os.Args[0]
-		err := fmt.Errorf("Usage: %s <options> <path to ssb-fixtures folder> <output path>\nOptions:\n", cmdName)
-		flag.PrintDefaults()
-		return err
-	}
-	indir, outdir := logpaths[0], logpaths[1]
-
 	if args.dryRun || args.verbose {
-		fmt.Fprintf(os.Stderr, "%s: will read log.offset from %s and output to %s\n", getToolName(), indir, outdir)
+		fmt.Fprintf(os.Stderr, "%s: will read log.offset from %s and output to %s\n", getToolName(), args.Indir, args.Outdir)
 		if args.dryRun {
 			return nil
 		}
 	}
 
-	sourceFile := filepath.Join(indir, "flume", "log.offset")
+	sourceFile := filepath.Join(args.Indir, "flume", "log.offset")
 	input, err = openLog(sourceFile)
 	if err != nil {
-		return fmt.Errorf("failed to open input log %s: %w\n", indir, err)
+		return fmt.Errorf("failed to open input log %s: %w\n", args.Indir, err)
 	}
 
-	feeds, err := mapIdentitiesToSecrets(indir, outdir, args.prune)
+	feeds, err := mapIdentitiesToSecrets(args.Indir, args.Outdir, args.Prune)
 	if err != nil {
 		return err
 	}
@@ -246,9 +236,9 @@ func spliceLogs(args runtimeArgs) error {
 		fmt.Fprintf(os.Stderr, "fixture had %d feeds\n", len(feeds))
 	}
 
-	src, err := input.Query(margaret.Limit(args.limit))
+	src, err := input.Query(margaret.Limit(-1))
 	if err != nil {
-		return fmt.Errorf("failed to create query on input log %s: %w\n", indir, err)
+		return fmt.Errorf("failed to create query on input log %s: %w\n", args.Indir, err)
 	}
 
 	i := 0
@@ -259,7 +249,7 @@ func spliceLogs(args runtimeArgs) error {
 			if luigi.IsEOS(err) {
 				break
 			}
-			return fmt.Errorf("failed to get log entry %s: %w\n", indir, err)
+			return fmt.Errorf("failed to get log entry %s: %w\n", args.Indir, err)
 		}
 
 		msg := v.(lfoMessage)
@@ -273,17 +263,17 @@ func spliceLogs(args runtimeArgs) error {
 
 		_, err = a.log.Append(v)
 		if err != nil {
-			return fmt.Errorf("failed to write entry to output log %s: %w\n", outdir, err)
+			return fmt.Errorf("failed to write entry to output log %s: %w\n", args.Outdir, err)
 		}
 		i++
 	}
 
-	err = persistIdentityMapping(feeds, outdir)
+	err = persistIdentityMapping(feeds, args.Outdir)
 	if err != nil {
 		return err
 	}
 
-	err = copyFile(filepath.Join(indir, "follow-graph.json"), outdir)
+	err = copyFile(filepath.Join(args.Indir, "follow-graph.json"), args.Outdir)
 	if err != nil {
 		return err
 	}
@@ -295,28 +285,45 @@ func spliceLogs(args runtimeArgs) error {
 	for _, a := range feeds {
 		if c, ok := a.log.(io.Closer); ok {
 			if err = c.Close(); err != nil {
-				return fmt.Errorf("failed to close output log %s: %w\n", outdir, err)
+				return fmt.Errorf("failed to close output log %s: %w\n", args.Outdir, err)
 			}
 		}
 	}
 	return nil
 }
 
-type runtimeArgs struct {
+type Args struct {
 	verbose bool
 	dryRun  bool
-	prune   bool
-	limit   int
+	// delete any offset.logs if encountered in Outdir, before appending new messages
+	Prune bool
+	// directory of ssb-fixtures output
+	Indir string
+	// directory of the spliced out logs
+	Outdir string
 }
 
 func main() {
-	args := runtimeArgs{}
+	args := Args{}
 	flag.BoolVar(&args.verbose, "v", false, "verbose: talks a bit more than than the tool otherwise is inclined to do")
 	flag.BoolVar(&args.dryRun, "dry", false, "only output what it would do")
-	flag.BoolVar(&args.prune, "prune", false, "removes existing output logs before writing to them (if -prune omitted, the splicer will instead exit with an error)")
-	flag.IntVar(&args.limit, "limit", -1, "how many entries to copy (defaults to unlimited)")
+	flag.BoolVar(&args.Prune, "prune", false, "removes existing output logs before writing to them (if -prune omitted, the splicer will instead exit with an error)")
+
 	flag.Parse()
-	err := spliceLogs(args)
+	logpaths := flag.Args()
+	var err error
+	if len(logpaths) != 2 {
+		cmdName := os.Args[0]
+		err = fmt.Errorf("Usage: %s <options> <path to ssb-fixtures folder> <output path>\nOptions:\n", cmdName)
+		flag.PrintDefaults()
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", getToolName(), err)
+		os.Exit(1)
+	}
+	args.Indir, args.Outdir = logpaths[0], logpaths[1]
+
+	err = SpliceLogs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", getToolName(), err)
 		os.Exit(1)
