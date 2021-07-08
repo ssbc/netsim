@@ -36,7 +36,7 @@ func pickName(splicedFixturesMap map[string]interface{}) string {
 	return splicedFixturesMap["folder"].(string)
 }
 
-// Returns a map of follows (id -> slice of ids that are followed), a map of blocks (isBlocking[id][otherId] = true if id blocks otherId)
+// Returns a map of follows (id -> slice of ids that are followed), a map of blocks (g.isBlocking[id][otherId] = true if id blocks otherId)
 func getFollowMap(followGraphPath string) (map[string][]string, map[string]map[string]bool, error) {
 	// get the json map of all known relations
 	b, err := os.ReadFile(followGraphPath)
@@ -117,69 +117,69 @@ type runtimeArgs struct {
 	maxHops          int
 }
 
-// uses:
-// * expectations.json
-// * root folder containing cmd&log-splicer processed fixtures
-var currentlyExecuting map[string]bool
-var idsToNames map[string]string
-var focusGroup []string
-var isBlocking map[string]map[string]bool
-var args runtimeArgs
+type Generator struct {
+	focusGroup         []string
+	idsToNames         map[string]string
+	namesToIDs         map[string]string
+	currentlyExecuting map[string]bool
+	isBlocking         map[string]map[string]bool
+	args               runtimeArgs
+}
 
-func main() {
-	currentlyExecuting = make(map[string]bool)
-	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
-	flag.StringVar(&args.expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
-	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
-	flag.IntVar(&args.maxHops, "hops", 2, "the max hops count to use")
-	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
-	flag.Parse()
+// a couple useful helper functions :)
+func (g Generator) getNames(src []string) []string {
+	extractedNames := make([]string, 0, len(src))
+	for _, id := range src {
+		extractedNames = append(extractedNames, g.idsToNames[id])
+	}
+	return extractedNames
+}
 
+func (g Generator) getIds(src []string) []string {
+	extractedIds := make([]string, 0, len(src))
+	for _, name := range src {
+		extractedIds = append(extractedIds, g.namesToIDs[name])
+	}
+	return extractedIds
+}
+
+// TO DO:
+// * DONE		finish refactoring cli tool to use Generator struct instead of globals
+// * DONE		rewrite batch connect to use generator, and pass in a pair?
+// * think about how to pass in runtime args properly (document + export runtime args? try cryptix's functional pattern?)
+// * write tests to make senpai happy :^)
+// * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
+
+func generateTest(args runtimeArgs) {
+	g := Generator{args: args, currentlyExecuting: make(map[string]bool)}
 	expectations, err := readExpectations(args.expectationsPath)
 	check(err)
 
 	// map of id -> [list of followed ids]
 	var followMap map[string][]string
-	followMap, isBlocking, err = getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
+	followMap, g.isBlocking, err = getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
 	check(err)
 
-	idsToNames, err = getIdentities(args.fixturesRoot)
+	g.idsToNames, err = getIdentities(args.fixturesRoot)
 	check(err)
 
-	puppetNames := make([]string, 0, len(idsToNames))
-	namesToIDs := make(map[string]string)
-	for id, secretFolder := range idsToNames {
-		namesToIDs[secretFolder] = id
-		puppetNames = append(puppetNames, idsToNames[id])
+	puppetNames := make([]string, 0, len(g.idsToNames))
+	g.namesToIDs = make(map[string]string)
+	for id, secretFolder := range g.idsToNames {
+		g.namesToIDs[secretFolder] = id
+		puppetNames = append(puppetNames, g.idsToNames[id])
 	}
 	sort.Strings(puppetNames)
 
-	getNames := func(src []string) []string {
-		extractedNames := make([]string, 0, len(src))
-		for _, id := range src {
-			extractedNames = append(extractedNames, idsToNames[id])
-		}
-		return extractedNames
-	}
-
-	// Note: do not remove, it's a useful help function: )
-	getIds := func(src []string) []string {
-		extractedIds := make([]string, 0, len(src))
-		for _, name := range src {
-			extractedIds = append(extractedIds, namesToIDs[name])
-		}
-		return extractedIds
-	}
-
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
-	focusGroup = make([]string, args.focusedPuppets)
+	g.focusGroup = make([]string, args.focusedPuppets)
 	for i := 0; i < args.focusedPuppets; i++ {
-		focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
+		g.focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
 	// deterministically shuffle the focus group
 	// TODO: accept --seed flag to change shuffling
-	rand.Shuffle(len(focusGroup), func(i, j int) {
-		focusGroup[i], focusGroup[j] = focusGroup[j], focusGroup[i]
+	rand.Shuffle(len(g.focusGroup), func(i, j int) {
+		g.focusGroup[i], g.focusGroup[j] = g.focusGroup[j], g.focusGroup[i]
 	})
 
 	/* given our starting set of puppets, called focus, and hops = 3, we will want to generate
@@ -194,7 +194,7 @@ func main() {
 			  done done  done done
 			 ========================
 	*/
-	focusIds := getIds(focusGroup)
+	focusIds := g.getIds(g.focusGroup)
 	var hopsPairs []pair
 	for _, id := range focusIds {
 		g := graph{followMap: followMap, seen: make(map[string]bool)}
@@ -210,75 +210,85 @@ func main() {
 	// init all puppets from the fixtures
 	// output `enter`, `load` stmts, sorted by puppet name
 	for _, puppetName := range puppetNames {
-		puppetId := namesToIDs[puppetName]
+		puppetId := g.namesToIDs[puppetName]
 		fmt.Printf("enter %s\n", puppetName)
 		fmt.Printf("load %s %s\n", puppetName, puppetId)
 	}
 
 	// start the focus group
-	start(focusGroup)
+	g.start(g.focusGroup)
 
 	// go through each hops pair and connect them, starting with the pairs the furthest away from the focus peers
 	for _, pair := range hopsPairs {
-		pair.batchConnect(idsToNames)
+		g.batchConnect(pair)
 	}
 
 	// output `has` stmts
-	for _, name := range focusGroup {
-		focusedId := namesToIDs[name]
-		has(name, getNames(expectations[focusedId]))
+	for _, name := range g.focusGroup {
+		focusedId := g.namesToIDs[name]
+		g.has(name, g.getNames(expectations[focusedId]))
 	}
 
-	stop(focusGroup)
-	fmt.Printf("comment total time: %d seconds\n", totalTime/1000)
+	g.stop(g.focusGroup)
 }
 
-func (p pair) batchConnect(idsToNames map[string]string) {
-	if isBlocking[p.dst][p.src] {
+func main() {
+	var args runtimeArgs
+	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
+	flag.StringVar(&args.expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
+	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
+	flag.IntVar(&args.maxHops, "hops", 2, "the max hops count to use")
+	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
+	flag.Parse()
+	generateTest(args)
+}
+
+func (g Generator) batchConnect(p pair) {
+	if g.isBlocking[p.dst][p.src] {
 		return
 	}
-	srcName, dstName := idsToNames[p.src], idsToNames[p.dst]
+	srcName, dstName := g.idsToNames[p.src], g.idsToNames[p.dst]
 	batchPair := []string{srcName, dstName}
 	dst := []string{dstName}
-	start(batchPair)
-	waitUntil(srcName, []string{srcName})
-	connect(srcName, dst)
-	waitUntil(srcName, dst)
-	disconnect(srcName, dst)
-	stop(batchPair)
+	g.start(batchPair)
+	g.waitUntil(srcName, []string{srcName})
+	g.connect(srcName, dst)
+	g.waitUntil(srcName, dst)
+	g.disconnect(srcName, dst)
+	g.stop(batchPair)
 }
 
-func has(issuer string, names []string) {
+func (g Generator) has(issuer string, names []string) {
 	for _, name := range names {
 		fmt.Printf("has %s %s@latest\n", issuer, name)
 	}
 }
 
-func disconnect(issuer string, names []string) {
+func (g Generator) disconnect(issuer string, names []string) {
 	for _, name := range names {
 		fmt.Printf("disconnect %s %s\n", issuer, name)
 	}
 }
 
-func connect(issuer string, names []string) {
+func (g Generator) connect(issuer string, names []string) {
 	for _, name := range names {
 		fmt.Printf("connect %s %s\n", issuer, name)
 	}
 }
 
-func start(names []string) {
+func (g Generator) start(names []string) {
 	for _, name := range names {
-		if _, exists := currentlyExecuting[name]; !exists {
-			fmt.Printf("start %s %s\n", name, args.ssbServer)
-			currentlyExecuting[name] = true
+		if _, exists := g.currentlyExecuting[name]; !exists {
+			fmt.Printf("start %s %s\n", name, g.args.ssbServer)
+			g.currentlyExecuting[name] = true
 		}
 	}
 }
 
-func stop(names []string) {
+func (g Generator) stop(names []string) {
 	for _, name := range names {
 		var skip bool
-		for _, focusName := range focusGroup {
+		for _, focusName := range g.focusGroup {
 			if name == focusName {
 				skip = true
 				break
@@ -287,8 +297,8 @@ func stop(names []string) {
 		if skip {
 			continue
 		}
-		if _, exists := currentlyExecuting[name]; exists {
-			delete(currentlyExecuting, name)
+		if _, exists := g.currentlyExecuting[name]; exists {
+			delete(g.currentlyExecuting, name)
 			fmt.Printf("stop %s\n", name)
 		}
 	}
@@ -328,15 +338,12 @@ func (g graph) recurseFollows(id string, hopsLeft int) []pair {
 	return pairs
 }
 
-func waitUntil(issuer string, names []string) {
+func (g Generator) waitUntil(issuer string, names []string) {
 	for _, name := range names {
 		fmt.Printf("waituntil %s %s@latest\n", issuer, name)
 	}
 }
 
-var totalTime int
-
-func waitMs(ms int) {
-	totalTime += ms
+func (g Generator) waitMs(ms int) {
 	fmt.Printf("wait %d\n", ms)
 }
