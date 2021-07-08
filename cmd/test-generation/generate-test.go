@@ -108,13 +108,12 @@ func getUniques(expectations map[string][]string) []string {
 	return uniques
 }
 
-type runtimeArgs struct {
-	ssbServer        string
-	fixturesRoot     string
-	expectationsPath string
-	batchSize        int
-	focusedPuppets   int
-	maxHops          int
+type Args struct {
+	SSBServer        string
+	FixturesRoot     string
+	ExpectationsPath string
+	FocusedCount     int
+	MaxHops          int
 }
 
 type Generator struct {
@@ -123,7 +122,7 @@ type Generator struct {
 	namesToIDs         map[string]string
 	currentlyExecuting map[string]bool
 	isBlocking         map[string]map[string]bool
-	args               runtimeArgs
+	args               Args
 }
 
 // a couple useful helper functions :)
@@ -149,18 +148,19 @@ func (g Generator) getIds(src []string) []string {
 // * think about how to pass in runtime args properly (document + export runtime args? try cryptix's functional pattern?)
 // * write tests to make senpai happy :^)
 // * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
+// * some kind of workflow where we pass expectations as a slice of data? maybe not
 
-func generateTest(args runtimeArgs) {
+func generateTest(args Args) {
 	g := Generator{args: args, currentlyExecuting: make(map[string]bool)}
-	expectations, err := readExpectations(args.expectationsPath)
+	expectations, err := readExpectations(args.ExpectationsPath)
 	check(err)
 
 	// map of id -> [list of followed ids]
 	var followMap map[string][]string
-	followMap, g.isBlocking, err = getFollowMap(path.Join(args.fixturesRoot, "follow-graph.json"))
+	followMap, g.isBlocking, err = getFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
 	check(err)
 
-	g.idsToNames, err = getIdentities(args.fixturesRoot)
+	g.idsToNames, err = getIdentities(args.FixturesRoot)
 	check(err)
 
 	puppetNames := make([]string, 0, len(g.idsToNames))
@@ -172,8 +172,8 @@ func generateTest(args runtimeArgs) {
 	sort.Strings(puppetNames)
 
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
-	g.focusGroup = make([]string, args.focusedPuppets)
-	for i := 0; i < args.focusedPuppets; i++ {
+	g.focusGroup = make([]string, args.FocusedCount)
+	for i := 0; i < args.FocusedCount; i++ {
 		g.focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
 	// deterministically shuffle the focus group
@@ -198,7 +198,7 @@ func generateTest(args runtimeArgs) {
 	var hopsPairs []pair
 	for _, id := range focusIds {
 		g := graph{followMap: followMap, seen: make(map[string]bool)}
-		hopsPairs = append(hopsPairs, g.recurseFollows(id, args.maxHops)...)
+		hopsPairs = append(hopsPairs, g.recurseFollows(id, args.MaxHops)...)
 	}
 
 	// reverse hopsPairs, so that the pairs the furthest from a focus puppet are at the start of the slice
@@ -233,12 +233,12 @@ func generateTest(args runtimeArgs) {
 }
 
 func main() {
-	var args runtimeArgs
-	flag.StringVar(&args.fixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
-	flag.StringVar(&args.expectationsPath, "expectations", "./expectations.json", "path to expectations.json")
-	flag.StringVar(&args.ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
-	flag.IntVar(&args.maxHops, "hops", 2, "the max hops count to use")
-	flag.IntVar(&args.focusedPuppets, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
+	var args Args
+	flag.StringVar(&args.FixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
+	flag.StringVar(&args.ExpectationsPath, "expectations", "./expectations.json", "path to expectations.json")
+	flag.StringVar(&args.SSBServer, "sbot", "ssb-server", "the ssb server to start puppets with")
+	flag.IntVar(&args.MaxHops, "hops", 2, "the max hops count to use")
+	flag.IntVar(&args.FocusedCount, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
 	flag.Parse()
 	generateTest(args)
 }
@@ -279,7 +279,7 @@ func (g Generator) connect(issuer string, names []string) {
 func (g Generator) start(names []string) {
 	for _, name := range names {
 		if _, exists := g.currentlyExecuting[name]; !exists {
-			fmt.Printf("start %s %s\n", name, g.args.ssbServer)
+			fmt.Printf("start %s %s\n", name, g.args.SSBServer)
 			g.currentlyExecuting[name] = true
 		}
 	}
