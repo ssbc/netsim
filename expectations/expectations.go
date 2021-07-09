@@ -1,14 +1,18 @@
-package main
+package expectations
 
 import (
 	"encoding/json"
-	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path"
 	"strings"
 )
+
+type Args struct {
+	MaxHops          int
+	ReplicateBlocked bool
+	Outpath          string
+}
 
 func check(err error) {
 	if err != nil {
@@ -75,11 +79,11 @@ func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bo
 	// persist to disk
 	b, err := json.MarshalIndent(outputMap, "", "  ")
 	check(err)
-	err = os.WriteFile(pathAndFile(args.Outpath, "expectations.json"), b, 0666)
+	err = os.WriteFile(PathAndFile(args.Outpath, "expectations.json"), b, 0666)
 	check(err)
 }
 
-func pathAndFile(dirpath, name string) string {
+func PathAndFile(dirpath, name string) string {
 	if strings.HasSuffix(dirpath, "json") {
 		dirpath = path.Dir(dirpath)
 	}
@@ -89,6 +93,7 @@ func pathAndFile(dirpath, name string) string {
 // TO DO:
 // * pass in fixturesRoot and use that to derive graphpath
 // * ProduceExpectations should output a string? or path to written file?
+
 func ProduceExpectations(args Args, graphpath string) {
 	b, err := os.ReadFile(graphpath)
 	check(err)
@@ -128,26 +133,4 @@ func ProduceExpectations(args Args, graphpath string) {
 		}
 	}
 	collapse(args, peers, blocked)
-}
-
-type Args struct {
-	MaxHops          int
-	ReplicateBlocked bool
-	Outpath          string
-}
-
-func main() {
-	var args Args
-	flag.IntVar(&args.MaxHops, "hops", 2, "the default global hops setting")
-	flag.BoolVar(&args.ReplicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
-	flag.StringVar(&args.Outpath, "out", "./expectations.json", "the filename and path where the expectations will be dumped")
-	flag.Parse()
-
-	if len(flag.Args()) == 0 {
-		fmt.Println("usage:\n  expectations <flags> <path to fixtures folder>")
-		os.Exit(0)
-	}
-
-	graphpath := pathAndFile(flag.Args()[0], "follow-graph.json")
-	ProduceExpectations(args, graphpath)
 }
