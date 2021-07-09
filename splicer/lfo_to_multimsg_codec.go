@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package main
+package splicer
 
 import (
 	"bytes"
@@ -56,7 +56,6 @@ func (c FlumeToMultiMsgCodec) NewDecoder(r io.Reader) margaret.Decoder {
 type decoder struct{ r io.Reader }
 
 func (dec *decoder) Decode() (interface{}, error) {
-
 	var m lfoMessage
 
 	var err error
