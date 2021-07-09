@@ -21,12 +21,12 @@ type Args struct {
 }
 
 type Generator struct {
-	focusGroup         []string
-	idsToNames         map[string]string
-	namesToIDs         map[string]string
+	FocusGroup         []string
+	IDsToNames         map[string]string
+	NamesToIDs         map[string]string
 	currentlyExecuting map[string]bool
 	isBlocking         map[string]map[string]bool
-	args               Args
+	Args               Args
 }
 
 func check(err error) {
@@ -35,7 +35,7 @@ func check(err error) {
 	}
 }
 
-func readExpectations(expectationsPath string) (map[string][]string, error) {
+func ReadExpectations(expectationsPath string) (map[string][]string, error) {
 	b, err := os.ReadFile(expectationsPath)
 	if err != nil {
 		return nil, err
@@ -48,12 +48,12 @@ func readExpectations(expectationsPath string) (map[string][]string, error) {
 	return v, nil
 }
 
-func pickName(splicedFixturesMap map[string]interface{}) string {
+func PickName(splicedFixturesMap map[string]interface{}) string {
 	return splicedFixturesMap["folder"].(string)
 }
 
 // Returns a map of follows (id -> slice of ids that are followed), a map of blocks (g.isBlocking[id][otherId] = true if id blocks otherId)
-func getFollowMap(followGraphPath string) (map[string][]string, map[string]map[string]bool, error) {
+func GetFollowMap(followGraphPath string) (map[string][]string, map[string]map[string]bool, error) {
 	// get the json map of all known relations
 	b, err := os.ReadFile(followGraphPath)
 	if err != nil {
@@ -86,7 +86,7 @@ func getFollowMap(followGraphPath string) (map[string][]string, map[string]map[s
 	return followMap, blockMap, nil
 }
 
-func getIdentities(fixturesRoot string) (map[string]string, error) {
+func GetIdentities(fixturesRoot string) (map[string]string, error) {
 	b, err := os.ReadFile(path.Join(fixturesRoot, "secret-ids.json"))
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func getIdentities(fixturesRoot string) (map[string]string, error) {
 	identities := make(map[string]string)
 	// however, we only want a mapping from id->foldername, so let's get that
 	for id, feedInfo := range v {
-		identities[id] = pickName(feedInfo)
+		identities[id] = PickName(feedInfo)
 	}
 	return identities, nil
 }
@@ -128,15 +128,15 @@ func getUniques(expectations map[string][]string) []string {
 func (g Generator) getNames(src []string) []string {
 	extractedNames := make([]string, 0, len(src))
 	for _, id := range src {
-		extractedNames = append(extractedNames, g.idsToNames[id])
+		extractedNames = append(extractedNames, g.IDsToNames[id])
 	}
 	return extractedNames
 }
 
-func (g Generator) getIds(src []string) []string {
+func (g Generator) GetIDs(src []string) []string {
 	extractedIds := make([]string, 0, len(src))
 	for _, name := range src {
-		extractedIds = append(extractedIds, g.namesToIDs[name])
+		extractedIds = append(extractedIds, g.NamesToIDs[name])
 	}
 	return extractedIds
 }
@@ -150,35 +150,35 @@ func (g Generator) getIds(src []string) []string {
 // * some kind of workflow where we pass expectations as a slice of data? maybe not
 
 func GenerateTest(args Args) {
-	g := Generator{args: args, currentlyExecuting: make(map[string]bool)}
-	expectations, err := readExpectations(args.ExpectationsPath)
+	g := Generator{Args: args, currentlyExecuting: make(map[string]bool)}
+	expectations, err := ReadExpectations(args.ExpectationsPath)
 	check(err)
 
 	// map of id -> [list of followed ids]
 	var followMap map[string][]string
-	followMap, g.isBlocking, err = getFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
+	followMap, g.isBlocking, err = GetFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
 	check(err)
 
-	g.idsToNames, err = getIdentities(args.FixturesRoot)
+	g.IDsToNames, err = GetIdentities(args.FixturesRoot)
 	check(err)
 
-	puppetNames := make([]string, 0, len(g.idsToNames))
-	g.namesToIDs = make(map[string]string)
-	for id, secretFolder := range g.idsToNames {
-		g.namesToIDs[secretFolder] = id
-		puppetNames = append(puppetNames, g.idsToNames[id])
+	puppetNames := make([]string, 0, len(g.IDsToNames))
+	g.NamesToIDs = make(map[string]string)
+	for id, secretFolder := range g.IDsToNames {
+		g.NamesToIDs[secretFolder] = id
+		puppetNames = append(puppetNames, g.IDsToNames[id])
 	}
 	sort.Strings(puppetNames)
 
 	// the cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
-	g.focusGroup = make([]string, args.FocusedCount)
+	g.FocusGroup = make([]string, args.FocusedCount)
 	for i := 0; i < args.FocusedCount; i++ {
-		g.focusGroup[i] = fmt.Sprintf("puppet-%05d", i)
+		g.FocusGroup[i] = fmt.Sprintf("puppet-%05d", i)
 	}
 	// deterministically shuffle the focus group
 	// TODO: accept --seed flag to change shuffling
-	rand.Shuffle(len(g.focusGroup), func(i, j int) {
-		g.focusGroup[i], g.focusGroup[j] = g.focusGroup[j], g.focusGroup[i]
+	rand.Shuffle(len(g.FocusGroup), func(i, j int) {
+		g.FocusGroup[i], g.FocusGroup[j] = g.FocusGroup[j], g.FocusGroup[i]
 	})
 
 	/* given our starting set of puppets, called focus, and hops = 3, we will want to generate
@@ -193,11 +193,11 @@ func GenerateTest(args Args) {
 			  done done  done done
 			 ========================
 	*/
-	focusIds := g.getIds(g.focusGroup)
-	var hopsPairs []pair
+	focusIds := g.GetIDs(g.FocusGroup)
+	var hopsPairs []Pair
 	for _, id := range focusIds {
-		g := graph{followMap: followMap, seen: make(map[string]bool)}
-		hopsPairs = append(hopsPairs, g.recurseFollows(id, args.MaxHops)...)
+		graph := Graph{FollowMap: followMap, Gen: g, Seen: make(map[string]bool)}
+		hopsPairs = append(hopsPairs, graph.RecurseFollows(id, args.MaxHops, false)...)
 	}
 
 	// reverse hopsPairs, so that the pairs the furthest from a focus puppet are at the start of the slice
@@ -209,13 +209,13 @@ func GenerateTest(args Args) {
 	// init all puppets from the fixtures
 	// output `enter`, `load` stmts, sorted by puppet name
 	for _, puppetName := range puppetNames {
-		puppetId := g.namesToIDs[puppetName]
+		puppetId := g.NamesToIDs[puppetName]
 		fmt.Printf("enter %s\n", puppetName)
 		fmt.Printf("load %s %s\n", puppetName, puppetId)
 	}
 
 	// start the focus group
-	g.start(g.focusGroup)
+	g.start(g.FocusGroup)
 
 	// go through each hops pair and connect them, starting with the pairs the furthest away from the focus peers
 	for _, pair := range hopsPairs {
@@ -223,19 +223,19 @@ func GenerateTest(args Args) {
 	}
 
 	// output `has` stmts
-	for _, name := range g.focusGroup {
-		focusedId := g.namesToIDs[name]
+	for _, name := range g.FocusGroup {
+		focusedId := g.NamesToIDs[name]
 		g.has(name, g.getNames(expectations[focusedId]))
 	}
 
-	g.stop(g.focusGroup)
+	g.stop(g.FocusGroup)
 }
 
-func (g Generator) batchConnect(p pair) {
+func (g Generator) batchConnect(p Pair) {
 	if g.isBlocking[p.dst][p.src] {
 		return
 	}
-	srcName, dstName := g.idsToNames[p.src], g.idsToNames[p.dst]
+	srcName, dstName := g.IDsToNames[p.src], g.IDsToNames[p.dst]
 	batchPair := []string{srcName, dstName}
 	dst := []string{dstName}
 	g.start(batchPair)
@@ -267,7 +267,7 @@ func (g Generator) connect(issuer string, names []string) {
 func (g Generator) start(names []string) {
 	for _, name := range names {
 		if _, exists := g.currentlyExecuting[name]; !exists {
-			fmt.Printf("start %s %s\n", name, g.args.SSBServer)
+			fmt.Printf("start %s %s\n", name, g.Args.SSBServer)
 			g.currentlyExecuting[name] = true
 		}
 	}
@@ -276,7 +276,7 @@ func (g Generator) start(names []string) {
 func (g Generator) stop(names []string) {
 	for _, name := range names {
 		var skip bool
-		for _, focusName := range g.focusGroup {
+		for _, focusName := range g.FocusGroup {
 			if name == focusName {
 				skip = true
 				break
@@ -292,36 +292,44 @@ func (g Generator) stop(names []string) {
 	}
 }
 
-type pair struct {
+type Pair struct {
 	src, dst string
 }
 
-type graph struct {
-	followMap map[string][]string
-	seen      map[string]bool
+type Graph struct {
+	FollowMap map[string][]string
+	Seen      map[string]bool
+	Gen       Generator
 }
 
 // TODO: change pair to { src: string, dst: []string }?
 // the above ^ change can also take care of batching the dst's into correct sized buckets.
 // if len(dst) > SOME_MAX, then we push what we already have to the pairs slice and start populating a new slice of
 // destinations
-func (g graph) recurseFollows(id string, hopsLeft int) []pair {
-	g.seen[id] = true
+func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
+	g.Seen[id] = true
 	if hopsLeft <= 0 {
-		return []pair{}
+		return []Pair{}
 	}
-	var pairs []pair
-	for _, otherId := range g.followMap[id] {
-		if g.seen[otherId] {
+	var pairs []Pair
+	for _, otherId := range g.FollowMap[id] {
+		if g.Seen[otherId] {
 			continue
 		}
-		pairs = append(pairs, pair{src: id, dst: otherId})
+		if verbose {
+			if hopsLeft == g.Gen.Args.MaxHops {
+				fmt.Printf("%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
+			} else {
+				fmt.Printf("%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
+			}
+		}
+		pairs = append(pairs, Pair{src: id, dst: otherId})
 	}
-	for _, otherId := range g.followMap[id] {
-		if g.seen[otherId] {
+	for _, otherId := range g.FollowMap[id] {
+		if g.Seen[otherId] {
 			continue
 		}
-		pairs = append(pairs, g.recurseFollows(otherId, hopsLeft-1)...)
+		pairs = append(pairs, g.RecurseFollows(otherId, hopsLeft-1, false)...)
 	}
 	return pairs
 }
