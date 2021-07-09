@@ -219,7 +219,7 @@ func bail(msg string) {
 	os.Exit(1)
 }
 
-func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, verbose bool, fixtures string) Simulator {
+func makeSimulator(args Args, sbots []string) Simulator {
 	puppetMap := make(map[string]*Puppet)
 	langMap := make(map[string]string)
 	fixturesIdsMap := make(map[string]FixturesFeedInfo)
@@ -245,17 +245,17 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		langMap[filepath.Base(botDir)] = botDir
 	}
 
-	absPuppetDir, err := filepath.Abs(puppetDir)
+	absPuppetDir, err := filepath.Abs(args.Outdir)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	// if we're loading fixtures, parse the identity-to-secret-folders map `secret-ids.json` (see cmd/log-splicer for info)
 	// secret-ids.json contains a map from feed id to { latest: int, folder: string }
-	if fixtures != "" {
-		fixturesIds, err := os.ReadFile(filepath.Join(fixtures, "secret-ids.json"))
+	if args.FixturesDir != "" {
+		fixturesIds, err := os.ReadFile(filepath.Join(args.FixturesDir, "secret-ids.json"))
 		if err != nil {
-			bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", fixtures))
+			bail(fmt.Sprintf("--fixtures %s was missing file secret-ids.json\ndid you run the netsim utility `cmd/log-splicer`?\n", args.FixturesDir))
 			return Simulator{}
 		}
 		err = json.Unmarshal(fixturesIds, &fixturesIdsMap)
@@ -269,12 +269,12 @@ func makeSimulator(basePort, hops int, puppetDir, caps string, sbots []string, v
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
 		fixturesIds:     fixturesIdsMap,
-		caps:            caps,
 		implementations: langMap,
-		basePort:        basePort,
-		hops:            hops,
-		verbose:         verbose,
-		fixtures:        fixtures,
+		caps:            args.Caps,
+		basePort:        args.BasePort,
+		hops:            args.Hops,
+		verbose:         args.verbose,
+		fixtures:        args.FixturesDir,
 	}
 
 	sim.rootCtx, sim.cancelExecution = context.WithCancel(context.Background())
@@ -730,32 +730,11 @@ func (s Simulator) exit() {
 
 const defaultShsCaps = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
 
-func main() {
-	var caps string
-	flag.StringVar(&caps, "caps", defaultShsCaps, "the secret handshake capability key")
-	var hops int
-	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
-	var fixturesDir string
-	flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
-	var testfile string
-	flag.StringVar(&testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
-	var outdir string
-	flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
-	var basePort int
-	flag.IntVar(&basePort, "port", 18888, "start of port range used for each running sbot")
-	var verbose bool
-	flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
-	flag.Parse()
-
-	if len(flag.Args()) == 0 {
-		PrintUsage()
-		bail("no language implementations were provided")
-	}
-
+func Run(args Args, sbots []string) {
 	// validate flag-passed caps key
-	_, err := base64.StdEncoding.DecodeString(caps)
+	_, err := base64.StdEncoding.DecodeString(args.Caps)
 	if err != nil {
-		bail(fmt.Sprintf("--caps %s was not a valid base64 sequence\n", caps))
+		bail(fmt.Sprintf("--caps %s was not a valid base64 sequence\n", args.Caps))
 	}
 	/*
 	 * the language implementation dir contains the code for starting a puppet, via a shim.
@@ -771,18 +750,47 @@ func main() {
 	 *   some way to instantiate seeded secrets for each puppet
 	 */
 
-	outdir = preparePuppetDir(outdir)
-	sim := makeSimulator(basePort, hops, outdir, caps, flag.Args(), verbose, fixturesDir)
+	args.Outdir = preparePuppetDir(args.Outdir)
+	sim := makeSimulator(args, sbots)
 	// monitor system interrupts via cmd-c/mod-c
 	sim.monitorInterrupts()
 
 	fmt.Println("TAP version 13")
-	lines := readTest(testfile)
+	lines := readTest(args.Testfile)
 	sim.ParseTest(lines)
 	sim.execute()
 
 	// once we are done we want all puppets to exit
 	sim.exit()
+}
+
+type Args struct {
+	Caps        string // global caps setting
+	Hops        int    // global hops setting
+	FixturesDir string // directory containing the spliced ssb-fixtures
+	Testfile    string // path to file containing dsl statements
+	Outdir      string // directory where puppet logs & files will be dumped
+	BasePort    int    // starting port used for instantiating the ports used by puppets
+	verbose     bool
+}
+
+func main() {
+	var args Args
+	flag.StringVar(&args.Caps, "caps", defaultShsCaps, "the secret handshake capability key")
+	flag.IntVar(&args.Hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
+	flag.StringVar(&args.FixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
+	flag.StringVar(&args.Testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
+	flag.StringVar(&args.Outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
+	flag.IntVar(&args.BasePort, "port", 18888, "start of port range used for each running sbot")
+	flag.BoolVar(&args.verbose, "v", false, "increase logging verbosity")
+	flag.Parse()
+
+	if len(flag.Args()) == 0 {
+		PrintUsage()
+		bail("no language implementations were provided")
+	}
+
+	Run(args, flag.Args())
 }
 
 func PrintUsage() {
