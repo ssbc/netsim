@@ -1,10 +1,9 @@
 // Generates a full netsim test, given a log-splicer processed ssb-fixtures folder and a replication expectations file
 // expectations.json.
-package main
+package generation
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -12,6 +11,23 @@ import (
 	"path"
 	"sort"
 )
+
+type Args struct {
+	SSBServer        string
+	FixturesRoot     string
+	ExpectationsPath string
+	FocusedCount     int
+	MaxHops          int
+}
+
+type Generator struct {
+	focusGroup         []string
+	idsToNames         map[string]string
+	namesToIDs         map[string]string
+	currentlyExecuting map[string]bool
+	isBlocking         map[string]map[string]bool
+	args               Args
+}
 
 func check(err error) {
 	if err != nil {
@@ -108,23 +124,6 @@ func getUniques(expectations map[string][]string) []string {
 	return uniques
 }
 
-type Args struct {
-	SSBServer        string
-	FixturesRoot     string
-	ExpectationsPath string
-	FocusedCount     int
-	MaxHops          int
-}
-
-type Generator struct {
-	focusGroup         []string
-	idsToNames         map[string]string
-	namesToIDs         map[string]string
-	currentlyExecuting map[string]bool
-	isBlocking         map[string]map[string]bool
-	args               Args
-}
-
 // a couple useful helper functions :)
 func (g Generator) getNames(src []string) []string {
 	extractedNames := make([]string, 0, len(src))
@@ -150,7 +149,7 @@ func (g Generator) getIds(src []string) []string {
 // * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
 // * some kind of workflow where we pass expectations as a slice of data? maybe not
 
-func generateTest(args Args) {
+func GenerateTest(args Args) {
 	g := Generator{args: args, currentlyExecuting: make(map[string]bool)}
 	expectations, err := readExpectations(args.ExpectationsPath)
 	check(err)
@@ -230,17 +229,6 @@ func generateTest(args Args) {
 	}
 
 	g.stop(g.focusGroup)
-}
-
-func main() {
-	var args Args
-	flag.StringVar(&args.FixturesRoot, "fixtures", "./fixtures-output", "root folder containing spliced out ssb-fixtures")
-	flag.StringVar(&args.ExpectationsPath, "expectations", "./expectations.json", "path to expectations.json")
-	flag.StringVar(&args.SSBServer, "sbot", "ssb-server", "the ssb server to start puppets with")
-	flag.IntVar(&args.MaxHops, "hops", 2, "the max hops count to use")
-	flag.IntVar(&args.FocusedCount, "focused", 2, "number of puppets to use for focus group (i.e. # of puppets that verify they are replicating others)")
-	flag.Parse()
-	generateTest(args)
 }
 
 func (g Generator) batchConnect(p pair) {
