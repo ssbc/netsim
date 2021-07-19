@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/ssb-ngi-pointer/netsim/dsl"
+	"github.com/ssb-ngi-pointer/netsim/sim"
 )
 
 func main() {
-	var args dsl.Args
-	flag.StringVar(&args.Caps, "caps", dsl.DefaultShsCaps, "the secret handshake capability key")
+	var args sim.Args
+	flag.StringVar(&args.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
 	flag.IntVar(&args.Hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
 	flag.StringVar(&args.FixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
 	flag.StringVar(&args.Testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
@@ -22,7 +22,7 @@ func main() {
 		return
 	}
 
-	dsl.Run(args, flag.Args())
+	sim.Run(args, flag.Args())
 }
 
 func PrintUsage() {
