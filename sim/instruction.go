@@ -1,4 +1,4 @@
-package dsl
+package sim
 
 import (
 	"fmt"
