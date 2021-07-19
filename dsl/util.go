@@ -1,9 +1,11 @@
-package main
+package dsl
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -43,6 +45,10 @@ func parseTestLine(line string, id int) Instruction {
 }
 
 func readTest(filename string) []string {
+	_, err := os.Stat(filename)
+	if errors.Is(err, os.ErrNotExist) {
+		bail(fmt.Sprintf("test file %s not found", filename))
+	}
 	absfilename, err := filepath.Abs(filename)
 	if err != nil {
 		log.Fatalln(err)

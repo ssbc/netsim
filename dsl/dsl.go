@@ -1,11 +1,10 @@
-package main
+package dsl
 
 import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -273,7 +272,7 @@ func makeSimulator(args Args, sbots []string) Simulator {
 		caps:            args.Caps,
 		basePort:        args.BasePort,
 		hops:            args.Hops,
-		verbose:         args.verbose,
+		verbose:         args.Verbose,
 		fixtures:        args.FixturesDir,
 	}
 
@@ -728,7 +727,7 @@ func (s Simulator) exit() {
 	time.Sleep(1 * time.Second)
 }
 
-const defaultShsCaps = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
+const DefaultShsCaps = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
 
 func Run(args Args, sbots []string) {
 	// validate flag-passed caps key
@@ -771,30 +770,5 @@ type Args struct {
 	Testfile    string // path to file containing dsl statements
 	Outdir      string // directory where puppet logs & files will be dumped
 	BasePort    int    // starting port used for instantiating the ports used by puppets
-	verbose     bool
-}
-
-func main() {
-	var args Args
-	flag.StringVar(&args.Caps, "caps", defaultShsCaps, "the secret handshake capability key")
-	flag.IntVar(&args.Hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
-	flag.StringVar(&args.FixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
-	flag.StringVar(&args.Testfile, "spec", "./test.txt", "test file containing network simulator test instructions")
-	flag.StringVar(&args.Outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
-	flag.IntVar(&args.BasePort, "port", 18888, "start of port range used for each running sbot")
-	flag.BoolVar(&args.verbose, "v", false, "increase logging verbosity")
-	flag.Parse()
-
-	if len(flag.Args()) == 0 {
-		PrintUsage()
-		bail("no language implementations were provided")
-	}
-
-	Run(args, flag.Args())
-}
-
-func PrintUsage() {
-	fmt.Println("netsim: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
-	fmt.Println("Options:")
-	flag.PrintDefaults()
+	Verbose     bool
 }
