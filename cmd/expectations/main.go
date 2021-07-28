@@ -1,11 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/ssb-ngi-pointer/netsim/expectations"
+	"log"
 	"os"
 )
+
+func check(err error) {
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
 
 func main() {
 	var args expectations.Args
@@ -20,5 +28,12 @@ func main() {
 	}
 
 	graphpath := expectations.PathAndFile(flag.Args()[0], "follow-graph.json")
-	expectations.ProduceExpectations(args, graphpath)
+	outputMap, err := expectations.ProduceExpectations(args, graphpath)
+	check(err)
+
+	// persist to disk
+	b, err := json.MarshalIndent(outputMap, "", "  ")
+	check(err)
+	err = os.WriteFile(expectations.PathAndFile(args.Outpath, "expectations.json"), b, 0666)
+	check(err)
 }
