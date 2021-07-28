@@ -2,7 +2,7 @@ package expectations
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -14,17 +14,13 @@ type Args struct {
 	Outpath          string
 }
 
-func check(err error) {
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
-
 type peer struct {
 	id      string
 	hops    [][]string
 	blocked map[string]bool
 }
+
+var output string
 
 func makePeer(args Args, id string) peer {
 	p := peer{id: id}
@@ -52,7 +48,7 @@ func populateHopsAt(args Args, count int, peers map[string]peer) {
 }
 
 // TODO: should we include hops[0]? i.e. the peer we are inspecting
-func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bool) {
+func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bool) map[string][]string {
 	// prune out duplicates when collapsing the map
 	collapsedHops := make(map[string]map[string]bool)
 	for id, p := range peers {
@@ -75,12 +71,7 @@ func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bo
 			outputMap[id] = append(outputMap[id], otherId)
 		}
 	}
-
-	// persist to disk
-	b, err := json.MarshalIndent(outputMap, "", "  ")
-	check(err)
-	err = os.WriteFile(PathAndFile(args.Outpath, "expectations.json"), b, 0666)
-	check(err)
+	return outputMap
 }
 
 func PathAndFile(dirpath, name string) string {
@@ -90,17 +81,25 @@ func PathAndFile(dirpath, name string) string {
 	return path.Join(dirpath, name)
 }
 
+func informError(msg string, err error) error {
+	return fmt.Errorf("%s (%w)", msg, err)
+}
+
 // TO DO:
 // * pass in fixturesRoot and use that to derive graphpath
 // * ProduceExpectations should output a string? or path to written file?
 
-func ProduceExpectations(args Args, graphpath string) {
+func ProduceExpectations(args Args, graphpath string) (map[string][]string, error) {
 	b, err := os.ReadFile(graphpath)
-	check(err)
+	if err != nil {
+		return nil, informError(fmt.Sprintf("couldn't read graph %s", graphpath), err)
+	}
 
 	var v map[string]map[string]interface{}
 	err = json.Unmarshal(b, &v)
-	check(err)
+	if err != nil {
+		return nil, informError("couldn't unmarshal graph", err)
+	}
 
 	// start the party by populating hops 0 via interpreting follow-graph.json:
 	// nil => can't deduce info
@@ -132,5 +131,6 @@ func ProduceExpectations(args Args, graphpath string) {
 			populateHopsAt(args, i, peers)
 		}
 	}
-	collapse(args, peers, blocked)
+	outputMap := collapse(args, peers, blocked)
+	return outputMap, nil
 }
