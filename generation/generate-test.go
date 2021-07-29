@@ -5,6 +5,7 @@ package generation
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -33,19 +34,6 @@ func check(err error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-}
-
-func ReadExpectations(expectationsPath string) (map[string][]string, error) {
-	b, err := os.ReadFile(expectationsPath)
-	if err != nil {
-		return nil, err
-	}
-	var v map[string][]string
-	err = json.Unmarshal(b, &v)
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
 }
 
 func PickName(splicedFixturesMap map[string]interface{}) string {
@@ -149,11 +137,13 @@ func (g Generator) GetIDs(src []string) []string {
 // * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
 // * some kind of workflow where we pass expectations as a slice of data? maybe not
 
-func GenerateTest(args Args) {
-	g := Generator{Args: args, currentlyExecuting: make(map[string]bool)}
-	expectations, err := ReadExpectations(args.ExpectationsPath)
-	check(err)
+var writer io.Writer
 
+func GenerateTest(args Args, expectations map[string][]string, outputWriter io.Writer) {
+	writer = outputWriter
+	g := Generator{Args: args, currentlyExecuting: make(map[string]bool)}
+
+	var err error
 	// map of id -> [list of followed ids]
 	var followMap map[string][]string
 	followMap, g.isBlocking, err = GetFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
@@ -210,8 +200,8 @@ func GenerateTest(args Args) {
 	// output `enter`, `load` stmts, sorted by puppet name
 	for _, puppetName := range puppetNames {
 		puppetId := g.NamesToIDs[puppetName]
-		fmt.Printf("enter %s\n", puppetName)
-		fmt.Printf("load %s %s\n", puppetName, puppetId)
+		fmt.Fprintf(writer, "enter %s\n", puppetName)
+		fmt.Fprintf(writer, "load %s %s\n", puppetName, puppetId)
 	}
 
 	// start the focus group
@@ -248,26 +238,26 @@ func (g Generator) batchConnect(p Pair) {
 
 func (g Generator) has(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Printf("has %s %s@latest\n", issuer, name)
+		fmt.Fprintf(writer, "has %s %s@latest\n", issuer, name)
 	}
 }
 
 func (g Generator) disconnect(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Printf("disconnect %s %s\n", issuer, name)
+		fmt.Fprintf(writer, "disconnect %s %s\n", issuer, name)
 	}
 }
 
 func (g Generator) connect(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Printf("connect %s %s\n", issuer, name)
+		fmt.Fprintf(writer, "connect %s %s\n", issuer, name)
 	}
 }
 
 func (g Generator) start(names []string) {
 	for _, name := range names {
 		if _, exists := g.currentlyExecuting[name]; !exists {
-			fmt.Printf("start %s %s\n", name, g.Args.SSBServer)
+			fmt.Fprintf(writer, "start %s %s\n", name, g.Args.SSBServer)
 			g.currentlyExecuting[name] = true
 		}
 	}
@@ -287,7 +277,7 @@ func (g Generator) stop(names []string) {
 		}
 		if _, exists := g.currentlyExecuting[name]; exists {
 			delete(g.currentlyExecuting, name)
-			fmt.Printf("stop %s\n", name)
+			fmt.Fprintf(writer, "stop %s\n", name)
 		}
 	}
 }
@@ -318,9 +308,9 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 		}
 		if verbose {
 			if hopsLeft == g.Gen.Args.MaxHops {
-				fmt.Printf("%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
+				fmt.Fprintf(writer, "%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
 			} else {
-				fmt.Printf("%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
+				fmt.Fprintf(writer, "%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
 			}
 		}
 		pairs = append(pairs, Pair{src: id, dst: otherId})
@@ -336,10 +326,10 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 
 func (g Generator) waitUntil(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Printf("waituntil %s %s@latest\n", issuer, name)
+		fmt.Fprintf(writer, "waituntil %s %s@latest\n", issuer, name)
 	}
 }
 
 func (g Generator) waitMs(ms int) {
-	fmt.Printf("wait %d\n", ms)
+	fmt.Fprintf(writer, "wait %d\n", ms)
 }
