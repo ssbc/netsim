@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ssb-ngi-pointer/netsim/expectations"
 	"github.com/ssb-ngi-pointer/netsim/generation"
+	"github.com/ssb-ngi-pointer/netsim/sim"
 	"github.com/ssb-ngi-pointer/netsim/splicer"
 	"os"
 	"path"
@@ -56,18 +57,25 @@ func main() {
 		// save test file to disk
 		os.WriteFile(path.Join(outpath, testfile), []byte(generatedTest), 0666)
 	case "test":
-		var caps string
-		var outdir string
-		var basePort int
-		var verbose bool
-		flag.StringVar(&caps, "caps", "TODO DEFAULT CAPS", "the secret handshake capability key")
-		flag.StringVar(&outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
-		flag.IntVar(&basePort, "port", 18888, "start of port range used for each running sbot")
-		flag.BoolVar(&verbose, "v", false, "increase logging verbosity")
+		var simArgs sim.Args
+		flag.StringVar(&simArgs.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
+		flag.StringVar(&simArgs.Outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
+		flag.IntVar(&simArgs.BasePort, "port", 18888, "start of port range used for each running sbot")
+		flag.BoolVar(&simArgs.Verbose, "v", false, "increase logging verbosity")
 		flag.Parse()
-		/* todo */
-		checkArgs(cmd)
-		fmt.Printf("do test with %s %s\n", fixturesDir, testfile)
+
+		simArgs.Hops = hops
+		simArgs.Testfile = testfile
+		simArgs.FixturesDir = fixturesDir
+
+		if len(flag.Args()) == 0 {
+			fmt.Println("netsim test: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
+			fmt.Println("Options:")
+			flag.PrintDefaults()
+			return
+		}
+
+		sim.Run(simArgs, flag.Args())
 	default:
 		usageExit()
 	}
