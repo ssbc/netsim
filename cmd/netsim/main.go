@@ -28,7 +28,6 @@ func main() {
 	var fixturesDir string
 	var testfile string
 	var hops int
-	flag.StringVar(&fixturesDir, "fixtures", "fixtures-output", "fixtures directory")
 	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test")
 	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
 
@@ -40,10 +39,19 @@ func main() {
 		var ssbServer string
 		var focusedPuppets int
 		flag.BoolVar(&replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
-		flag.StringVar(&outpath, "out", "./netsim-gen", "the output path of the generated netsim test & its auxiliary files")
+		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
 		flag.StringVar(&ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
 		flag.IntVar(&focusedPuppets, "focused", 2, "number of puppets that verify they are fully replicating their hops")
 		flag.Parse()
+
+		if len(flag.Args()) == 0 {
+			fmt.Println("netsim generate: <options> path-to-ssb-fixtures-output")
+			fmt.Println("Generate a netsim test from a ssb-fixtures folder\n")
+			fmt.Println("Options:")
+			flag.PrintDefaults()
+			return
+		}
+		fixturesDir = flag.Args()[0]
 
 		// splice out the logs into a separate folder
 		fixturesOutput := path.Join(outpath, "fixtures-output")
@@ -70,6 +78,7 @@ func main() {
 
 		if len(flag.Args()) == 0 {
 			fmt.Println("netsim test: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
+			fmt.Println("Run a simulation with the passed-in sbots and a netsim test\n")
 			fmt.Println("Options:")
 			flag.PrintDefaults()
 			return
