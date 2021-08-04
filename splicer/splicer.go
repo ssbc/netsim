@@ -60,30 +60,30 @@ func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) (map[
 		if strings.HasPrefix(info.Name(), "secret") {
 			b, err := os.ReadFile(path)
 			if err != nil {
-				return err
+				return inform(err, "failed to read secret when mapping id -> secret")
 			}
 
 			// load the secret & pick out its feed id
 			v := FeedInfo{}
 			err = json.Unmarshal(b, &v)
 			if err != nil {
-				return err
+				return inform(err, "failed to unmarshal during id -> secret mapping")
 			}
 
 			puppetname, err := derivePuppetName(info.Name())
 			if err != nil {
-				return err
+				return inform(err, "derive puppet name failed")
 			}
 
 			v.identityFolder, err = createFolderStructure(outdir, puppetname)
 			if err != nil {
-				return err
+				return inform(err, fmt.Sprintf("failed to create folder structure for %s", puppetname))
 			}
 
 			logpath := filepath.Join(v.identityFolder, "flume", "log.offset")
 			err = checkLogEmpty(logpath, removeExistingLogs)
 			if err != nil {
-				return err
+				return inform(err, "empty log check failed")
 			}
 
 			// open a margaret log for the specified output format (lfo)
@@ -95,7 +95,9 @@ func mapIdentitiesToSecrets(indir, outdir string, removeExistingLogs bool) (map[
 			feeds[v.ID] = v
 
 			err = copySecret(v.identityFolder, b)
-			return err
+			if err != nil {
+				return inform(err, fmt.Sprintf("failed to copy secret for %s", v.ID))
+			}
 		}
 		return nil
 	})
