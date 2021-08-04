@@ -48,6 +48,8 @@ func populateHopsAt(args Args, count int, peers map[string]peer) {
 }
 
 // TODO: should we include hops[0]? i.e. the peer we are inspecting
+
+// collapses the crawled follow structure of all known peers into a single map of id -> ids expected to be replicated
 func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bool) map[string][]string {
 	// prune out duplicates when collapsing the map
 	collapsedHops := make(map[string]map[string]bool)
