@@ -22,6 +22,7 @@ type Args struct {
 }
 
 type Generator struct {
+	// The cohort of peers we care about; the ones who will be issuing `has` stmts, the ones whose data we will inspect
 	FocusGroup         []string
 	IDsToNames         map[string]string
 	NamesToIDs         map[string]string
@@ -45,14 +46,14 @@ func GetFollowMap(followGraphPath string) (map[string][]string, map[string]map[s
 	// get the json map of all known relations
 	b, err := os.ReadFile(followGraphPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read followGraph (%q): %w",followGraphPath, err)
+		return nil, nil, fmt.Errorf("failed to read followGraph (%q): %w", followGraphPath, err)
 	}
 
 	// unpack into goland
 	var v map[string]map[string]interface{}
 	err = json.Unmarshal(b, &v)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal json from followGraph file (%q): %w",followGraphPath, err)
+		return nil, nil, fmt.Errorf("failed to unmarshal json from followGraph file (%q): %w", followGraphPath, err)
 	}
 
 	followMap := make(map[string][]string)
