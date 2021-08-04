@@ -87,10 +87,7 @@ func informError(msg string, err error) error {
 	return fmt.Errorf("%s (%w)", msg, err)
 }
 
-// TO DO:
-// * pass in fixturesRoot and use that to derive graphpath
-// * ProduceExpectations should output a string? or path to written file?
-
+// ProduceExpectations returns a map of id -> ids expected to be replicated
 func ProduceExpectations(args Args, graphpath string) (map[string][]string, error) {
 	b, err := os.ReadFile(graphpath)
 	if err != nil {
