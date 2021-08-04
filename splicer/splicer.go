@@ -156,6 +156,20 @@ func copyFile(src, outdir string) error {
 	return err
 }
 
+// used by the `alloffsets` dsl command, which allows a puppet to have knowledge over all historic messages on start
+func copyMonolithicOffset(indir, outdir string) error {
+	src := filepath.Join(indir, "flume", "log.offset")
+	dst := filepath.Join(outdir, "puppet-all", "flume")
+	// create the special folder `puppet-all`
+	err := os.MkdirAll(dst, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	// copy the monolithic offset from input fixtures into puppet-all/flume/log.offset
+	err = copyFile(src, dst)
+	return err
+}
+
 func derivePuppetName(secretFilename string) (string, error) {
 	// write puppet names based on secret names, to preserve the implicit pareto distribution of post authors
 	// (authors with lower secret ids make more posts)
@@ -229,6 +243,11 @@ func SpliceLogs(args Args) error {
 	}
 
 	feeds, err := mapIdentitiesToSecrets(args.Indir, args.Outdir, args.Prune)
+	if err != nil {
+		return err
+	}
+
+	err = copyMonolithicOffset(args.Indir, args.Outdir)
 	if err != nil {
 		return err
 	}

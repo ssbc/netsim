@@ -18,6 +18,7 @@ type Puppet struct {
 	caps          string
 	secretDir     string
 	omitOffset    bool
+	allOffsets    bool
 	port          int
 	hops          int
 	seqno         int
@@ -91,8 +92,12 @@ func (p *Puppet) start(s Simulator, shim string) error {
 		cmd.Env = append(cmd.Env,
 			fmt.Sprintf("SECRET=%s", filepath.Join(s.fixtures, p.secretDir, "secret")))
 		if !p.omitOffset {
-			cmd.Env = append(cmd.Env,
-				fmt.Sprintf("LOG_OFFSET=%s", filepath.Join(s.fixtures, p.secretDir, "flume", "log.offset")))
+			offsetLoc := filepath.Join(s.fixtures, p.secretDir, "flume", "log.offset")
+			// this puppet knows about **ALL* historic messages (their log.offset is exactly the same as the input ssb-fixtures)
+			if p.allOffsets {
+				offsetLoc = filepath.Join(s.fixtures, "puppet-all", "flume", "log.offset")
+			}
+			cmd.Env = append(cmd.Env, fmt.Sprintf("LOG_OFFSET=%s", offsetLoc))
 		}
 	}
 

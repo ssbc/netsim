@@ -25,6 +25,7 @@ enter <name>            // should be called before any other command dealing wit
 hops <name> <number>    // should be called before starting a peer to have any effect
 caps <name> <string>    // should be called before starting a peer to have any effect
 skipoffset <name>       // should be called before starting a peer to have any effect (omits copying over log.offset when loading identity from fixtures)
+alloffsets <name>       // should be called before starting a peer to have any effect (preloads the non-spliced input ssb-fixtures => puppet acts like a pub)
 load <name> @<base64>.ed25519
 start <name> <implementation-folder>
 stop <name>

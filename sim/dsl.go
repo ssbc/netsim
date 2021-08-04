@@ -23,6 +23,7 @@ import (
 )
 
 const DefaultShsCaps = "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
+
 type Args struct {
 	Caps        string // global caps setting
 	Hops        int    // global hops setting
@@ -30,7 +31,7 @@ type Args struct {
 	Testfile    string // path to file containing sim statements
 	Outdir      string // directory where puppet logs & files will be dumped
 	BasePort    int    // starting port used for instantiating the ports used by puppets
-	Verbose     bool	 // produce more output when running (echoes puppet output in realtime, in addition to TAP assertions)
+	Verbose     bool   // produce more output when running (echoes puppet output in realtime, in addition to TAP assertions)
 }
 
 type Process struct {
@@ -316,6 +317,11 @@ func (s Simulator) execute() {
 			name := s.getInstructionArg(1)
 			p := s.getPuppet(name)
 			p.omitOffset = true
+			instr.TestSuccess()
+		case "alloffsets":
+			name := s.getInstructionArg(1)
+			p := s.getPuppet(name)
+			p.allOffsets = true
 			instr.TestSuccess()
 		case "hops":
 			name := s.getInstructionArg(1)
