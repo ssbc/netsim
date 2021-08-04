@@ -67,6 +67,7 @@ func main() {
 	case "test":
 		var simArgs sim.Args
 		flag.StringVar(&simArgs.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
+		flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
 		flag.StringVar(&simArgs.Outdir, "out", "./puppets", "the output directory containing instantiated netsim peers")
 		flag.IntVar(&simArgs.BasePort, "port", 18888, "start of port range used for each running sbot")
 		flag.BoolVar(&simArgs.Verbose, "v", false, "increase logging verbosity")
