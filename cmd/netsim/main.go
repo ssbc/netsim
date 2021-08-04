@@ -21,8 +21,8 @@ func main() {
 	if len(os.Args) < 2 {
 		usageExit()
 	}
-	// get the command
-	cmd := getCommand()
+	// get the command name and shift the arguments around for flag parsing
+	cmd := prepareCommand()
 
 	// define flags common across all commands
 	var fixturesDir string
@@ -64,7 +64,10 @@ func main() {
 		// echo
 		fmt.Println(generatedTest)
 		// save test file to disk
-		os.WriteFile(path.Join(outpath, testfile), []byte(generatedTest), 0666)
+		err := os.WriteFile(path.Join(outpath, testfile), []byte(generatedTest), 0666)
+		if err != nil {
+			errOut("netsim generate", fmt.Errorf("failed to write test to disk (%w)", err))
+		}
 	case "test":
 		var simArgs sim.Args
 		flag.StringVar(&simArgs.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
@@ -98,9 +101,7 @@ func spliceLogs(fixturesPath, dst string) {
 	args.Prune = true
 	args.Indir, args.Outdir = fixturesPath, dst
 	err := splicer.SpliceLogs(args)
-	if err != nil {
-		errorOut("splicer", err)
-	}
+	errOut("splicer", err)
 }
 
 func generateExpectations(fixturesRoot string, hops int, replicateBlocked bool) map[string][]string {
@@ -108,9 +109,7 @@ func generateExpectations(fixturesRoot string, hops int, replicateBlocked bool) 
 	args.MaxHops = hops
 	args.ReplicateBlocked = replicateBlocked
 	outputMap, err := expectations.ProduceExpectations(args, path.Join(fixturesRoot, "follow-graph.json"))
-	if err != nil {
-		errorOut("expectations", err)
-	}
+	errOut("expectations", err)
 	return outputMap
 }
 
@@ -126,12 +125,14 @@ func generateTest(fixturesRoot, sbot string, focused, hops int, expectations map
 	return s.String()
 }
 
-func errorOut(tool string, err error) {
-	fmt.Fprintf(os.Stderr, "%s: %s\n", "tool", err)
-	os.Exit(1)
+func errOut(tool string, err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", tool, err)
+		os.Exit(1)
+	}
 }
 
-func getCommand() string {
+func prepareCommand() string {
 	cmd := os.Args[1]
 	// splice out the command argument from os.Args
 	var args []string
