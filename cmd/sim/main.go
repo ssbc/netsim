@@ -19,6 +19,7 @@ func main() {
 
 	if len(flag.Args()) == 0 {
 		PrintUsage()
+		os.Exit(1)
 		return
 	}
 
