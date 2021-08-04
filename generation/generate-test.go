@@ -77,10 +77,12 @@ func GetFollowMap(followGraphPath string) (map[string][]string, map[string]map[s
 	return followMap, blockMap, nil
 }
 
+// Produces a map of hex identifiers to the folder storing the puppet's id & log.offset
 func GetIdentities(fixturesRoot string) (map[string]string, error) {
-	b, err := os.ReadFile(path.Join(fixturesRoot, "secret-ids.json"))
+	filename := path.Join(fixturesRoot, "secret-ids.json")
+	b, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetIdentities: could not read %s (%w)", filename, err)
 	}
 	// secret-ids.json contains a map of ids -> {latest, folder}
 	var v map[string]map[string]interface{}
