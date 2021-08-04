@@ -24,7 +24,7 @@ func main() {
 
 	if len(flag.Args()) == 0 {
 		fmt.Println("Usage:\n expectations <flags> <path to spliced fixtures folder>")
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	graphpath := expectations.PathAndFile(flag.Args()[0], "follow-graph.json")

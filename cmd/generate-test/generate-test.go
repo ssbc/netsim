@@ -24,7 +24,7 @@ func main() {
 	if len(os.Args) == 1 {
 		fmt.Println("Usage: generate-test <flags>")
 		flag.PrintDefaults()
-		os.Exit(0)
+		os.Exit(1)
 	}
 
 	expectationsArgs.MaxHops = args.MaxHops

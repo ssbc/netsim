@@ -48,7 +48,7 @@ func main() {
 		cmdName := os.Args[0]
 		fmt.Printf("Usage: %s <options> <path to ssb-fixtures folder> <output path>\nOptions:\n", cmdName)
 		flag.PrintDefaults()
-		os.Exit(0)
+		os.Exit(1)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", getToolName(), err)

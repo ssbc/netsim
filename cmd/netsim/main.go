@@ -14,7 +14,7 @@ import (
 
 func usageExit() {
 	fmt.Println("Usage: netsim [generate, test] <flags>")
-	os.Exit(0)
+	os.Exit(1)
 }
 
 func main() {
@@ -49,6 +49,7 @@ func main() {
 			fmt.Println("Generate a netsim test from a ssb-fixtures folder\n")
 			fmt.Println("Options:")
 			flag.PrintDefaults()
+			os.Exit(1)
 			return
 		}
 		fixturesDir = flag.Args()[0]
@@ -82,20 +83,13 @@ func main() {
 			fmt.Println("Run a simulation with the passed-in sbots and a netsim test\n")
 			fmt.Println("Options:")
 			flag.PrintDefaults()
+			os.Exit(1)
 			return
 		}
 
 		sim.Run(simArgs, flag.Args())
 	default:
 		usageExit()
-	}
-}
-
-func checkArgs(cmd string) {
-	if len(flag.Args()) == 0 {
-		fmt.Printf("Usage: netsim %s <flags>\nOptions:\n", cmd)
-		flag.PrintDefaults()
-		os.Exit(0)
 	}
 }
 
