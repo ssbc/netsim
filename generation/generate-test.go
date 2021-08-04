@@ -29,6 +29,8 @@ type Generator struct {
 	currentlyExecuting map[string]bool
 	isBlocking         map[string]map[string]bool
 	Args               Args
+
+	output io.Writer
 }
 
 func check(err error) {
@@ -138,11 +140,12 @@ func (g Generator) GetIDs(src []string) []string {
 // * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
 // * some kind of workflow where we pass expectations as a slice of data? maybe not
 
-var writer io.Writer
-
 func GenerateTest(args Args, expectations map[string][]string, outputWriter io.Writer) {
-	writer = outputWriter
-	g := Generator{Args: args, currentlyExecuting: make(map[string]bool)}
+	g := Generator{
+		Args:               args,
+		currentlyExecuting: make(map[string]bool),
+		output:             outputWriter,
+	}
 
 	var err error
 	// map of id -> [list of followed ids]
@@ -201,8 +204,8 @@ func GenerateTest(args Args, expectations map[string][]string, outputWriter io.W
 	// output `enter`, `load` stmts, sorted by puppet name
 	for _, puppetName := range puppetNames {
 		puppetId := g.NamesToIDs[puppetName]
-		fmt.Fprintf(writer, "enter %s\n", puppetName)
-		fmt.Fprintf(writer, "load %s %s\n", puppetName, puppetId)
+		fmt.Fprintf(g.output, "enter %s\n", puppetName)
+		fmt.Fprintf(g.output, "load %s %s\n", puppetName, puppetId)
 	}
 
 	// start the focus group
@@ -239,26 +242,26 @@ func (g Generator) batchConnect(p Pair) {
 
 func (g Generator) has(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Fprintf(writer, "has %s %s@latest\n", issuer, name)
+		fmt.Fprintf(g.output, "has %s %s@latest\n", issuer, name)
 	}
 }
 
 func (g Generator) disconnect(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Fprintf(writer, "disconnect %s %s\n", issuer, name)
+		fmt.Fprintf(g.output, "disconnect %s %s\n", issuer, name)
 	}
 }
 
 func (g Generator) connect(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Fprintf(writer, "connect %s %s\n", issuer, name)
+		fmt.Fprintf(g.output, "connect %s %s\n", issuer, name)
 	}
 }
 
 func (g Generator) start(names []string) {
 	for _, name := range names {
 		if _, exists := g.currentlyExecuting[name]; !exists {
-			fmt.Fprintf(writer, "start %s %s\n", name, g.Args.SSBServer)
+			fmt.Fprintf(g.output, "start %s %s\n", name, g.Args.SSBServer)
 			g.currentlyExecuting[name] = true
 		}
 	}
@@ -278,7 +281,7 @@ func (g Generator) stop(names []string) {
 		}
 		if _, exists := g.currentlyExecuting[name]; exists {
 			delete(g.currentlyExecuting, name)
-			fmt.Fprintf(writer, "stop %s\n", name)
+			fmt.Fprintf(g.output, "stop %s\n", name)
 		}
 	}
 }
@@ -309,9 +312,9 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 		}
 		if verbose {
 			if hopsLeft == g.Gen.Args.MaxHops {
-				fmt.Fprintf(writer, "%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
+				fmt.Fprintf(g.Gen.output, "%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
 			} else {
-				fmt.Fprintf(writer, "%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
+				fmt.Fprintf(g.Gen.output, "%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
 			}
 		}
 		pairs = append(pairs, Pair{src: id, dst: otherId})
@@ -327,10 +330,10 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 
 func (g Generator) waitUntil(issuer string, names []string) {
 	for _, name := range names {
-		fmt.Fprintf(writer, "waituntil %s %s@latest\n", issuer, name)
+		fmt.Fprintf(g.output, "waituntil %s %s@latest\n", issuer, name)
 	}
 }
 
 func (g Generator) waitMs(ms int) {
-	fmt.Fprintf(writer, "wait %d\n", ms)
+	fmt.Fprintf(g.output, "wait %d\n", ms)
 }
