@@ -132,14 +132,6 @@ func (g Generator) GetIDs(src []string) []string {
 	return extractedIds
 }
 
-// TO DO:
-// * DONE		finish refactoring cli tool to use Generator struct instead of globals
-// * DONE		rewrite batch connect to use generator, and pass in a pair?
-// * think about how to pass in runtime args properly (document + export runtime args? try cryptix's functional pattern?)
-// * write tests to make senpai happy :^)
-// * fprintf to a slice or something, return the string from generateTest, then echo it in cli tool usecase
-// * some kind of workflow where we pass expectations as a slice of data? maybe not
-
 func GenerateTest(args Args, expectations map[string][]string, outputWriter io.Writer) {
 	g := Generator{
 		Args:               args,
