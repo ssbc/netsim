@@ -415,6 +415,10 @@ func (s Simulator) execute() {
 		case "waituntil":
 			line := s.getInstructionArg(2)
 			arg := strings.Split(line, "@")
+			if len(arg) < 2 {
+				s.Abort(fmt.Errorf("waituntil statement was missing @<seqno> (%s)", line))
+				return
+			}
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
@@ -486,6 +490,10 @@ func (s Simulator) execute() {
 		case "has":
 			line := s.getInstructionArg(2)
 			arg := strings.Split(line, "@")
+			if len(arg) < 2 {
+				s.Abort(fmt.Errorf("has statement was missing @<seqno> (%s)", line))
+				return
+			}
 			dst, seq := arg[0], arg[1]
 			srcPuppet := s.getSrcPuppet()
 			dstPuppet := s.getPuppet(dst)
