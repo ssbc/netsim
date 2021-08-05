@@ -13,7 +13,7 @@ import (
 )
 
 func usageExit() {
-	fmt.Println("Usage: netsim [generate, test] <flags>")
+	fmt.Println("Usage: netsim [generate, test, convert] <flags>")
 	os.Exit(1)
 }
 
@@ -28,7 +28,7 @@ func main() {
 	var fixturesDir string
 	var testfile string
 	var hops int
-	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test")
+	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test file")
 	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
 
 	// handle each command, optionally defining command-specific flags, and finally invoking the command
@@ -45,12 +45,9 @@ func main() {
 		flag.Parse()
 
 		if len(flag.Args()) == 0 {
-			fmt.Println("netsim generate: <options> path-to-ssb-fixtures-output")
-			fmt.Println("Generate a netsim test from a ssb-fixtures folder\n")
-			fmt.Println("Options:")
-			flag.PrintDefaults()
-			os.Exit(1)
-			return
+			printHelp("generate",
+				"path-to-ssb-fixtures-output",
+				"Generate a netsim test from a ssb-fixtures folder")
 		}
 		fixturesDir = flag.Args()[0]
 
@@ -82,15 +79,26 @@ func main() {
 		simArgs.FixturesDir = fixturesDir
 
 		if len(flag.Args()) == 0 {
-			fmt.Println("netsim test: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
-			fmt.Println("Run a simulation with the passed-in sbots and a netsim test\n")
-			fmt.Println("Options:")
-			flag.PrintDefaults()
-			os.Exit(1)
-			return
+			printHelp("test",
+				"path-to-sbot1 path-to-sbot2.. path-to-sbotn",
+				"Run a simulation with the passed-in sbots and a netsim test")
 		}
-
 		sim.Run(simArgs, flag.Args())
+	case "convert":
+		var outpath string
+		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
+		flag.Parse()
+
+		if len(flag.Args()) == 0 {
+			printHelp("convert",
+				"path-to-ssb-fixtures",
+				"Convert raw ssb-fixtures into netsim-style ssb-fixtures.")
+		}
+		fixturesDir = flag.Args()[0]
+
+		// splice out the logs into a separate folder
+		fixturesOutput := path.Join(outpath, "fixtures-output")
+		spliceLogs(fixturesDir, fixturesOutput)
 	default:
 		usageExit()
 	}
@@ -111,6 +119,14 @@ func generateExpectations(fixturesRoot string, hops int, replicateBlocked bool) 
 	outputMap, err := expectations.ProduceExpectations(args, path.Join(fixturesRoot, "follow-graph.json"))
 	errOut("expectations", err)
 	return outputMap
+}
+
+func printHelp(cmd, usage, description string) {
+	fmt.Printf("netsim %s: <options> %s\n", cmd, usage)
+	fmt.Println(description, "\n")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
+	os.Exit(1)
 }
 
 func generateTest(fixturesRoot, sbot string, focused, hops int, expectations map[string][]string) string {
