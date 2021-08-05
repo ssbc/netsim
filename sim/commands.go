@@ -129,8 +129,8 @@ func DoHast(src, dst *Puppet, seqno string) (string, error) {
 		if seqno == "0" { // the script expected that it wouldn't anyhow
 			return "", nil
 		}
-		m := "expected it to but dst does not have feed"
-		return m, TestError{err: fmt.Errorf("feed not stored in dest"), message: m}
+		m := fmt.Sprintf("expected %s to have %s; it didn't", src.name, dst.name)
+		return m, TestError{err: fmt.Errorf("feed not stored by dst"), message: m}
 	}
 
 	// get the asserted seqno and a message, if we're inducting a seqno based on available info
