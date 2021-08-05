@@ -30,13 +30,13 @@ func taplog(str string) {
 	}
 }
 
-func getLatestByFeedID(seqnos []Latest, feedID string) Latest {
+func getLatestByFeedID(seqnos []Latest, feedID string) (Latest, bool) {
 	for _, seqnoWrapper := range seqnos {
 		if seqnoWrapper.ID == feedID {
-			return seqnoWrapper
+			return seqnoWrapper, true
 		}
 	}
-	return Latest{}
+	return Latest{}, false
 }
 
 func parseTestLine(line string, id int) Instruction {
