@@ -13,7 +13,7 @@ import (
 )
 
 func usageExit() {
-	fmt.Println("Usage: netsim [generate, test] <flags>")
+	fmt.Println("Usage: netsim [generate, run] <flags>")
 	os.Exit(1)
 }
 
@@ -28,8 +28,8 @@ func main() {
 	var fixturesDir string
 	var testfile string
 	var hops int
-	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test")
-	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
+	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test file")
+	flag.IntVar(&hops, "hops", 2, "hops controls the distance from a peer that information should still be retrieved")
 
 	// handle each command, optionally defining command-specific flags, and finally invoking the command
 	switch cmd {
@@ -38,6 +38,8 @@ func main() {
 		var outpath string
 		var ssbServer string
 		var focusedPuppets int
+		var onlySplice bool
+		flag.BoolVar(&onlySplice, "no-test-script", false, "only converts the input fixtures to netsim-style fixtures")
 		flag.BoolVar(&replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
 		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
 		flag.StringVar(&ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
@@ -45,18 +47,18 @@ func main() {
 		flag.Parse()
 
 		if len(flag.Args()) == 0 {
-			fmt.Println("netsim generate: <options> path-to-ssb-fixtures-output")
-			fmt.Println("Generate a netsim test from a ssb-fixtures folder\n")
-			fmt.Println("Options:")
-			flag.PrintDefaults()
-			os.Exit(1)
-			return
+			printHelp("generate",
+				"path-to-ssb-fixtures-output",
+				"Generate a netsim test from a ssb-fixtures folder")
 		}
 		fixturesDir = flag.Args()[0]
 
 		// splice out the logs into a separate folder
 		fixturesOutput := path.Join(outpath, "fixtures-output")
 		spliceLogs(fixturesDir, fixturesOutput)
+		if onlySplice {
+			os.Exit(0)
+		}
 		// use the spliced logs to generate expectations
 		expectations := generateExpectations(fixturesOutput, hops, replicateBlocked)
 		// use the generated expectations & generate the test
@@ -68,7 +70,7 @@ func main() {
 		if err != nil {
 			errOut("netsim generate", fmt.Errorf("failed to write test to disk (%w)", err))
 		}
-	case "test":
+	case "run":
 		var simArgs sim.Args
 		flag.StringVar(&simArgs.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
 		flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
@@ -82,14 +84,10 @@ func main() {
 		simArgs.FixturesDir = fixturesDir
 
 		if len(flag.Args()) == 0 {
-			fmt.Println("netsim test: <options> path-to-sbot1 path-to-sbot2.. path-to-sbotn")
-			fmt.Println("Run a simulation with the passed-in sbots and a netsim test\n")
-			fmt.Println("Options:")
-			flag.PrintDefaults()
-			os.Exit(1)
-			return
+			printHelp("run",
+				"path-to-sbot1 path-to-sbot2.. path-to-sbotn",
+				"Run a simulation with the passed-in sbots and a netsim test")
 		}
-
 		sim.Run(simArgs, flag.Args())
 	default:
 		usageExit()
@@ -111,6 +109,14 @@ func generateExpectations(fixturesRoot string, hops int, replicateBlocked bool) 
 	outputMap, err := expectations.ProduceExpectations(args, path.Join(fixturesRoot, "follow-graph.json"))
 	errOut("expectations", err)
 	return outputMap
+}
+
+func printHelp(cmd, usage, description string) {
+	fmt.Printf("netsim %s: <options> %s\n", cmd, usage)
+	fmt.Println(description, "\n")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
+	os.Exit(1)
 }
 
 func generateTest(fixturesRoot, sbot string, focused, hops int, expectations map[string][]string) string {
