@@ -297,7 +297,7 @@ func (s Simulator) execute() {
 
 		s.updateCurrentInstruction(instr)
 		switch instr.command {
-		case "comment":
+		case "#", "comment":
 			instr.TestSuccess()
 		case "enter":
 			name := s.getInstructionArg(1)
