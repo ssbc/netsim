@@ -274,17 +274,25 @@ func (s *Sleeper) sleep(d time.Duration) {
 	}
 }
 
+func (s Simulator) checkCancellation() bool {
+	select {
+	case <-s.rootCtx.Done():
+		taplog("Context canceled, stopping execution")
+		return true
+	default:
+		// keep running
+		return false
+	}
+}
+
 func (s Simulator) execute() {
 	sleeper := Sleeper{sim: s}
 	start := time.Now()
 	for _, instr := range s.instructions {
 		// check if we have received any cancellations before continuing on to process test commands
-		select {
-		case <-s.rootCtx.Done():
-			taplog("Context canceled, stopping execution")
+		canceled := s.checkCancellation()
+		if canceled {
 			return
-		default:
-			// keep running
 		}
 
 		s.updateCurrentInstruction(instr)
@@ -433,6 +441,10 @@ func (s Simulator) execute() {
 				if err == nil {
 					break
 				} else {
+					canceled := s.checkCancellation()
+					if canceled {
+						return
+					}
 					taplog(fmt.Sprintf("waituntil had an error! on retry attempt %d/%d", retries+1, MAX_RETRIES))
 					sleeper.sleep(1 * time.Second)
 				}
