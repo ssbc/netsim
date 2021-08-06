@@ -388,8 +388,13 @@ func (s Simulator) execute() {
 				}
 				p.feedID = feedID
 			}
+			err = p.countMessages()
+			if err != nil {
+				instr.TestFailure(err)
+				continue
+			}
 			instr.TestSuccess()
-			taplog(fmt.Sprintf("%s has id %s", name, p.feedID))
+			taplog(fmt.Sprintf("%s (%d messages) has id %s ", name, p.totalMessages, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
 			name := s.getInstructionArg(1)
