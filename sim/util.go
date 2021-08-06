@@ -57,5 +57,13 @@ func readTest(filename string) []string {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	return strings.Split(strings.TrimSpace(string(testfile)), "\n")
+	var lines []string
+	for _, line := range strings.Split(string(testfile), "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
