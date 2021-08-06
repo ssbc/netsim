@@ -13,7 +13,7 @@ import (
 )
 
 func usageExit() {
-	fmt.Println("Usage: netsim [generate, test, convert] <flags>")
+	fmt.Println("Usage: netsim [generate, run] <flags>")
 	os.Exit(1)
 }
 
@@ -29,7 +29,7 @@ func main() {
 	var testfile string
 	var hops int
 	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test file")
-	flag.IntVar(&hops, "hops", 2, "the hops setting controls the distance from a peer that information should still be retrieved")
+	flag.IntVar(&hops, "hops", 2, "hops controls the distance from a peer that information should still be retrieved")
 
 	// handle each command, optionally defining command-specific flags, and finally invoking the command
 	switch cmd {
@@ -38,6 +38,8 @@ func main() {
 		var outpath string
 		var ssbServer string
 		var focusedPuppets int
+		var onlySplice bool
+		flag.BoolVar(&onlySplice, "no-test-script", false, "only converts the input fixtures to netsim-style fixtures")
 		flag.BoolVar(&replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
 		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
 		flag.StringVar(&ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
@@ -54,6 +56,9 @@ func main() {
 		// splice out the logs into a separate folder
 		fixturesOutput := path.Join(outpath, "fixtures-output")
 		spliceLogs(fixturesDir, fixturesOutput)
+		if onlySplice {
+			os.Exit(0)
+		}
 		// use the spliced logs to generate expectations
 		expectations := generateExpectations(fixturesOutput, hops, replicateBlocked)
 		// use the generated expectations & generate the test
@@ -65,7 +70,7 @@ func main() {
 		if err != nil {
 			errOut("netsim generate", fmt.Errorf("failed to write test to disk (%w)", err))
 		}
-	case "test":
+	case "run":
 		var simArgs sim.Args
 		flag.StringVar(&simArgs.Caps, "caps", sim.DefaultShsCaps, "the secret handshake capability key")
 		flag.StringVar(&fixturesDir, "fixtures", "", "optional: path to the output of a ssb-fixtures run, if using")
@@ -79,26 +84,11 @@ func main() {
 		simArgs.FixturesDir = fixturesDir
 
 		if len(flag.Args()) == 0 {
-			printHelp("test",
+			printHelp("run",
 				"path-to-sbot1 path-to-sbot2.. path-to-sbotn",
 				"Run a simulation with the passed-in sbots and a netsim test")
 		}
 		sim.Run(simArgs, flag.Args())
-	case "convert":
-		var outpath string
-		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
-		flag.Parse()
-
-		if len(flag.Args()) == 0 {
-			printHelp("convert",
-				"path-to-ssb-fixtures",
-				"Convert raw ssb-fixtures into netsim-style ssb-fixtures.")
-		}
-		fixturesDir = flag.Args()[0]
-
-		// splice out the logs into a separate folder
-		fixturesOutput := path.Join(outpath, "fixtures-output")
-		spliceLogs(fixturesDir, fixturesOutput)
 	default:
 		usageExit()
 	}
