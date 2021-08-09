@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 DIR="$1"
 PORT="$2"
 # the following env variables are always set from netsim:
@@ -7,6 +8,7 @@ PORT="$2"
 # if ssb-fixtures are provided, the following variables are also set:
 #   ${LOG_OFFSET}  the location of the log.offset file to be used
 #   ${SECRET}      the location of the secret file which should be copied to the new ssb-dir
+echo "starting go-ssb from ${SCRIPTPATH}"
 
 mkdir -p "${DIR}/log"
 
@@ -17,7 +19,7 @@ then
     then
         echo "running with log.offset at ${LOG_OFFSET}; initiating conversion script"
         # run fixtures conversion script
-        /home/cblgh/code/go/src/go-ssb/cmd/ssb-offset-converter/ssb-offset-converter -if lfo ${LOG_OFFSET} "$DIR/log"
+        ${SCRIPTPATH}/ssb-offset-converter -if lfo ${LOG_OFFSET} "$DIR/log"
     else 
         echo "puppet was started previously, and a ${LOG_OFFSET}-based log.offset already exists"
     fi
@@ -36,5 +38,5 @@ echo "using caps ${CAPS} and hops ${HOPS}"
 echo "puppet lives in ${DIR}"
 export LIBRARIAN_WRITEALL=0 
 # note: exec is important. otherwise the process won't be killed when the netsim has finished running :)
-exec /home/cblgh/code/go/src/go-ssb/cmd/go-sbot/go-sbot -lis :"$PORT" -wslis :"$(($PORT+1))" -repo "$DIR" -shscap "${CAPS}" -hops "${HOPS}"
+exec ${SCRIPTPATH}/go-sbot -lis :"$PORT" -wslis :"$(($PORT+1))" -repo "$DIR" -shscap "${CAPS}" -hops "${HOPS}"
 
