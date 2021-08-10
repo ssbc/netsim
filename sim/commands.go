@@ -154,7 +154,7 @@ func DoWaitUntil(src, dst *Puppet, seqno string) (string, error) {
 		return "", err
 	}
 
-	// do create history stream, with some special options, to block on the destination puppet until we receive assertedSeqno
+	// with these options createHistoryStream blocks on the destination until we receive assertedSeqno (or timeouts)
 	_, err = DoCreateHistoryStream(src, dst.feedID, assertedSeqno, true)
 	if err != nil {
 		m := fmt.Sprintf("%s expected %s@%d", src.name, dst.name, assertedSeqno)
@@ -195,7 +195,7 @@ func DoCreateHistoryStream(p *Puppet, who string, n int, live bool) (string, err
 		}
 	}
 
-	err = src.Reader(prettyPrintSourceJSON(response))
+	err = src.Reader(prettyPrintSourceJSON(&response))
 	if err != nil {
 		err = fmt.Errorf("failed to read body: %w (mux source error: %v)", err, src.Err())
 		return "", err
@@ -230,8 +230,9 @@ func DoLog(p *Puppet, n int) (string, error) {
 
 	var response []string
 	ctx := context.TODO()
+
 	for src.Next(ctx) {
-		err = src.Reader(prettyPrintSourceJSON(response))
+		err = src.Reader(prettyPrintSourceJSON(&response))
 		if err != nil {
 			return "", err
 		}
@@ -239,7 +240,7 @@ func DoLog(p *Puppet, n int) (string, error) {
 	return strings.Join(response, "\n"), nil
 }
 
-func prettyPrintSourceJSON(response []string) func(rd io.Reader) error {
+func prettyPrintSourceJSON(response *[]string) func(rd io.Reader) error {
 	var genericMap map[string]interface{}
 
 	return func(rd io.Reader) error {
@@ -261,7 +262,7 @@ func prettyPrintSourceJSON(response []string) func(rd io.Reader) error {
 		}
 
 		// encode the json bytes as utf-8 characters
-		response = append(response, string(b))
+		*response = append(*response, string(b))
 		return err
 	}
 }

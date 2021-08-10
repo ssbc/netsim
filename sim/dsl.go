@@ -450,7 +450,7 @@ func (s Simulator) execute() {
 					if canceled {
 						return
 					}
-					taplog(fmt.Sprintf("waituntil had an error! on retry attempt %d/%d", retries+1, MAX_RETRIES))
+					taplog(fmt.Sprintf("waituntil had an error on attempt %d/%d (%s) ", retries, MAX_RETRIES, err))
 					sleeper.sleep(1 * time.Second)
 				}
 			}
