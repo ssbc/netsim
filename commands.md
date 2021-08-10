@@ -27,22 +27,22 @@ caps <name> <string>    // should be called before starting a peer to have any e
 skipoffset <name>       // should be called before starting a peer to have any effect (omits copying over log.offset when loading identity from fixtures)
 alloffsets <name>       // should be called before starting a peer to have any effect (preloads the non-spliced input ssb-fixtures => puppet acts like a pub)
 load <name> @<base64>.ed25519               // loads an id & its associated secret + log.offset from fixtures
-start <name> <implementation-folder>
-stop <name>
+start <name> <implementation-folder>        // spin up name as ssb peer using the specifed sbot implementation
+stop <name>                                 // stop a currently running peer
 log <name> <amount of messages from the end to debug print>
-wait <milliseconds>             // pause script execution
+wait <milliseconds>                         // pause script execution
 waituntil <name1> <name2>@<latest||seqno>   // pause script execution until name1 has name2 at seqno in local db
 has <name1> <name2>@<latest||seqno>         // assert name1 has at least name2's seqno in local db
 post <name>     // add a predefined message (`bep`) of type `type: post` to name's local database
 publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)
-follow <name1> <name2>
-unfollow <name1> <name2>
-isfollowing <name1> <name2>     // assert that name1 is following name2
-isnotfollowing <name1> <name2>
-connect <name1> <name2>         // attempt to establish a network connection between name1 and name2
-disconnect <name1> <name2>
-comment <...>   // always passes; can be used to write comments inside netsim tests
-# <...>         // always passes; can be used to write comments inside netsim tests. alias for `comment`
+follow <name1> <name2>                      // name1 adds a contact message for name2 to local db
+unfollow <name1> <name2>                    // the inverse of above
+isfollowing <name1> <name2>                 // assert that name1 is following name2
+isnotfollowing <name1> <name2>              // the inverse of above
+connect <name1> <name2>                     // attempt to establish a network connection between name1 and name2
+disconnect <name1> <name2>                  // close an established network connection
+comment <...>                               // always passes; use to write comments
+# <...>                                     // always passes; use to write comments. alias for `comment`
 ```
 
 ## Not yet implemented
