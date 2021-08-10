@@ -274,7 +274,7 @@ func (s *Sleeper) sleep(d time.Duration) {
 	}
 }
 
-func (s Simulator) checkCancellation() bool {
+func (s Simulator) isCanceled() bool {
 	select {
 	case <-s.rootCtx.Done():
 		taplog("Context canceled, stopping execution")
@@ -290,8 +290,7 @@ func (s Simulator) execute() {
 	start := time.Now()
 	for _, instr := range s.instructions {
 		// check if we have received any cancellations before continuing on to process test commands
-		canceled := s.checkCancellation()
-		if canceled {
+		if s.isCanceled() {
 			return
 		}
 
@@ -374,21 +373,24 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
-			sleeper.sleep(1 * time.Second)
+			// give the sbot process some time to start
+			sleeper.sleep(2 * time.Second)
 
 			// a retry loop that tries to ping puppet's sbot, exits when ok or max retries reached
-			MAX_RETRIES := 10
+			const MAX_RETRIES = 15
 			var feedID string
 			for retries := 0; retries < MAX_RETRIES; retries++ {
 				feedID, err = DoWhoami(p)
 				if err == nil {
 					break
 				} else {
-					canceled := s.checkCancellation()
-					if canceled {
+					if s.isCanceled() {
 						return
 					}
-					taplog(fmt.Sprintf("whoami errored on attempt %d/%d (%s) ", retries, MAX_RETRIES, err))
+					taplog(fmt.Sprintf("waiting for %s sbot to start; retry %d/%d", p.name, retries, MAX_RETRIES))
+					if s.verbose {
+						taplog(fmt.Sprintf("%s", err))
+					}
 					sleeper.sleep(5 * time.Second)
 				}
 			}
@@ -396,7 +398,7 @@ func (s Simulator) execute() {
 			// if we still have an error after going through the retries, it's time to abort
 			// cause somethin' aint workin
 			if err != nil {
-				s.Abort(err)
+				s.Abort(fmt.Errorf("%s errored during start (%w)", p.name, err))
 				return
 			}
 
@@ -468,8 +470,7 @@ func (s Simulator) execute() {
 				if err == nil {
 					break
 				} else {
-					canceled := s.checkCancellation()
-					if canceled {
+					if s.isCanceled() {
 						return
 					}
 					taplog(fmt.Sprintf("waituntil had an error on attempt %d/%d (%s) ", retries, MAX_RETRIES, err))
