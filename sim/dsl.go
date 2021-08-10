@@ -374,20 +374,42 @@ func (s Simulator) execute() {
 				instr.TestFailure(err)
 				continue
 			}
-			// TODO: make this more resource efficient (have a retry loop that tries to ping puppet's sbot, exit when ok)
-			// look at waituntil's implementation for a good solution?
 			sleeper.sleep(1 * time.Second)
 
-			// if this puppet is loaded from fixtures, omit doing whoami to find out its feedID
-			// (we already know it)
-			if !p.usesFixtures() {
-				feedID, err := DoWhoami(p)
-				if err != nil {
-					instr.TestFailure(err)
-					continue
+			// a retry loop that tries to ping puppet's sbot, exits when ok or max retries reached
+			MAX_RETRIES := 10
+			var feedID string
+			for retries := 0; retries < MAX_RETRIES; retries++ {
+				feedID, err = DoWhoami(p)
+				if err == nil {
+					break
+				} else {
+					canceled := s.checkCancellation()
+					if canceled {
+						return
+					}
+					taplog(fmt.Sprintf("whoami errored on attempt %d/%d (%s) ", retries, MAX_RETRIES, err))
+					sleeper.sleep(5 * time.Second)
 				}
+			}
+
+			// if we still have an error after going through the retries, it's time to abort
+			// cause somethin' aint workin
+			if err != nil {
+				s.Abort(err)
+				return
+			}
+
+			// if running with fixtures: validate feedID matches feedID defined by `load <p.name> <id>`
+			if p.usesFixtures() {
+				if p.feedID != feedID {
+					s.Abort(fmt.Errorf("%s feed id was expected as %s, was %s", p.name, p.feedID, feedID))
+					return
+				}
+			} else {
 				p.feedID = feedID
 			}
+
 			err = p.countMessages()
 			if err != nil {
 				instr.TestFailure(err)
