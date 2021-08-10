@@ -4,8 +4,8 @@ simulator works by executing a test specification file. The current set of imple
 can be read below.
 
 ### Command Parameter Legend
-The listing below provides brief explanations of the various parameters that are provided to
-the network simulator commands when writing test files.
+The listing below provides brief explanations of various commands and their
+parameters provided by the network simulator and used when writing test files.
 
 * `<name>` is non-spaced name used to refer to the same test puppet (i.e. an ssb identity),
 * `<seqno>` is a sequence number as derived from the log of a particular peer e.g. 1, 2, 5, 1337
@@ -26,22 +26,23 @@ hops <name> <number>    // should be called before starting a peer to have any e
 caps <name> <string>    // should be called before starting a peer to have any effect
 skipoffset <name>       // should be called before starting a peer to have any effect (omits copying over log.offset when loading identity from fixtures)
 alloffsets <name>       // should be called before starting a peer to have any effect (preloads the non-spliced input ssb-fixtures => puppet acts like a pub)
-load <name> @<base64>.ed25519
+load <name> @<base64>.ed25519               // loads an id & its associated secret + log.offset from fixtures
 start <name> <implementation-folder>
 stop <name>
 log <name> <amount of messages from the end to debug print>
-wait <milliseconds>
-waituntil <name1> <name2>@<latest||seqno>
-has <name1> <name2>@<latest||seqno>
-post <name>
+wait <milliseconds>             // pause script execution
+waituntil <name1> <name2>@<latest||seqno>   // pause script execution until name1 has name2 at seqno in local db
+has <name1> <name2>@<latest||seqno>         // assert name1 has at least name2's seqno in local db
+post <name>     // add a predefined message (`bep`) of type `type: post` to name's local database
 publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)
 follow <name1> <name2>
 unfollow <name1> <name2>
-isfollowing <name1> <name2>
+isfollowing <name1> <name2>     // assert that name1 is following name2
 isnotfollowing <name1> <name2>
-connect <name1> <name2>
+connect <name1> <name2>         // attempt to establish a network connection between name1 and name2
 disconnect <name1> <name2>
-comment <...> // always passes; can be used to write comments inside netsim tests
+comment <...>   // always passes; can be used to write comments inside netsim tests
+# <...>         // always passes; can be used to write comments inside netsim tests. alias for `comment`
 ```
 
 ## Not yet implemented
@@ -51,10 +52,4 @@ The following commands might, or might not, be implemented—or they might be im
 block <name1> <name2>
 isblocked <name1> <name2>
 isnotblocked <name1> <name2>
-hasnot <name1> <name2>@<latest||seqno>
-// the following commands are to be used in combination with a fixtures folder, passed with the flag --fixtures <folder>
-truncate <name1> <name2>@<new length>
 ```
-
-The commands `load` and `truncate` would be introduced if the simulator implements
-support for loading in [ssb-fixtures](https://github.com/ssb-ngi-pointer/ssb-fixtures) pre-generated offset files.

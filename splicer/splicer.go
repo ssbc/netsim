@@ -136,6 +136,7 @@ func copySecret(identityFolder string, b []byte) error {
 	return err
 }
 
+// copies a file `src` to folder `outdir`, using `filepath.Base(src)` for naming the resultant file
 func copyFile(src, outdir string) error {
 	// open a file descriptor to the src file (in read only mode)
 	srcfile, err := os.Open(src)
@@ -143,7 +144,7 @@ func copyFile(src, outdir string) error {
 		return err
 	}
 
-	// prepare the destination file to be written to
+	// prepare the destination file for writing
 	filename := filepath.Base(src)
 	dst := filepath.Join(outdir, filename)
 	dstfile, err := os.Create(dst)
