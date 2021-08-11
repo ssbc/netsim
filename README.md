@@ -54,8 +54,9 @@ For more on authoring netsim commands:
 * [`commands.md`](./commands.md) 
 * [`ssb-netsim`](https://github.com/ssb-ngi-pointer/ssb-netsim), the nodejs helper library 
 
-Finally, you can always peak at the [original design doc](./initial-design-doc.md) if you are
-curious to see how things began.
+There's also a [tutorial](./tutorial.md) that demonstrates fixture generation. Finally, you can
+always peak at the [original design doc](./initial-design-doc.md) if you are curious to see how
+things began.
 
 ## Example
 Say we want to test an sbot implementation in `~/code/ssb-server`, just to make sure the basics
