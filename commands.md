@@ -33,7 +33,7 @@ log <name> <amount of messages from the end to debug print>
 wait <milliseconds>                         // pause script execution
 waituntil <name1> <name2>@<latest||seqno>   // pause script execution until name1 has name2 at seqno in local db
 has <name1> <name2>@<latest||seqno>         // assert name1 has at least name2's seqno in local db
-post <name>     // add a predefined message (`bep`) of type `type: post` to name's local database
+post <name>                                 // add a predefined message (`bep`) of type `type: post` to name's local database
 publish <name> (key1 value) (key2.nestedkey value)... // example: publish alice (type post) (value.content hello) (channel ssb-help)
 follow <name1> <name2>                      // name1 adds a contact message for name2 to local db
 unfollow <name1> <name2>                    // the inverse of above
