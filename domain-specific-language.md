@@ -25,9 +25,9 @@ connecting and disconnecting specific peers, asserting the latest known sequence
 peer from another, etc.
 
 These statements will be composed of behind-the-scenes muxrpc calls (as well as specifics for
-starting a particular ssb peer; see the previous netsim writeup for thoughts on the specifics),
-with a goal to use the smallest set of muxrpc calls that lets us implement the most useful
-testing functionality.
+starting a particular ssb peer; see the [previous netsim writeup](./initial-design-doc.md) for
+thoughts on the specifics), with a goal to use the smallest set of muxrpc calls that lets us
+implement the most useful testing functionality.
 
 Each DSL statement, when run, will output [TAP-compliant messages](https://testanything.org/tap-specification.html) 
 on standard output. That is, existing TAP frameworks and tooling (like [`tape`](https://github.com/substack/tape) and
