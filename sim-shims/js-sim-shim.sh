@@ -44,8 +44,8 @@ else
     chmod 600 "$DIR/secret"
 fi
 
-echo 'starting as DEBUG=* exec "$SCRIPTPATH"/bin.js start -- --conn.autostart false --friends.hops "$HOPS" --caps.shs "$CAPS" --path "$DIR" --port "$PORT" --ws.port "$WS_PORT"'
+echo 'starting as DEBUG=* exec "$SCRIPTPATH"/bin.js start -- --friends.hops "$HOPS" --caps.shs "$CAPS" --path "$DIR" --port "$PORT" --ws.port "$WS_PORT"'
 
 # finally: start the ssb-server with custom ports
 # note: exec is important. otherwise the process won't be killed when the netsim has finished running :)
-DEBUG=* exec "$SCRIPTPATH"/bin.js start -- --conn.autostart false --friends.hops "$HOPS" --caps.shs "$CAPS" --path "$DIR" --port "$PORT" --ws.port "$WS_PORT"
+DEBUG=* exec "$SCRIPTPATH"/bin.js start -- --no-conn.autostart --friends.hops "$HOPS" --caps.shs "$CAPS" --path "$DIR" --port "$PORT" --ws.port "$WS_PORT"
