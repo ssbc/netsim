@@ -8,6 +8,7 @@ import (
 	"github.com/ssb-ngi-pointer/netsim/generation"
 	"log"
 	"math/rand"
+	"os"
 	"path"
 	"sort"
 )
@@ -26,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	var err error
-	g := generation.Generator{Args: args}
+	g := generation.Generator{Args: args, Output: os.Stdout}
 	// map of id -> [list of followed ids]
 	var followMap map[string][]string
 	followMap, _, err = generation.GetFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
