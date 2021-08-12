@@ -51,15 +51,27 @@ func TestHops(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		hopsMap, err := ProduceExpectations(Args{MaxHops: test.hops}, "follow-graph.json")
-		a.Empty(err, "ProduceExpectations had an error")
+		t.Run(fmt.Sprintf("hops %d", test.hops), func(t *testing.T) {
+			a := assert.New(t)
+			hopsMap, err := ProduceExpectations(Args{MaxHops: test.hops}, "follow-graph.json")
+			a.Empty(err, "ProduceExpectations had an error")
 
-		expectedFeeds, ok := hopsMap[test.origin]
-		a.True(ok, fmt.Sprintf("%s did not exist in follow graph", test.origin))
+			expectedFeeds, ok := hopsMap[test.origin]
+			a.True(ok, fmt.Sprintf("%s not in follow graph", test.origin))
+			results := transformResult(expectedFeeds)
 
-		a.EqualValues(len(test.output), len(expectedFeeds), fmt.Sprintf("expectations for hops %d did not match asserted output", test.hops))
-		for i := range expectedFeeds {
-			a.EqualValues(expectedFeeds[i], test.output[i])
-		}
+			a.EqualValues(len(test.output), len(results), fmt.Sprintf("expectations for hops %d did not match asserted output", test.hops))
+			for _, id := range test.output {
+				a.True(results[id], fmt.Sprintf("results lacked %s", id))
+			}
+		})
 	}
+}
+
+func transformResult(s []string) map[string]bool {
+	m := make(map[string]bool)
+	for _, id := range s {
+		m[id] = true
+	}
+	return m
 }
