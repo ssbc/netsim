@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 )
@@ -27,12 +28,12 @@ twk -> tsa
 */
 
 func TestHops(t *testing.T) {
-	a := assert.New(t)
+	a, r := assert.New(t), require.New(t)
 	b, err := os.ReadFile("./follow-graph.json")
-	a.Empty(err, "os.ReadFile could not read follow graph")
+	r.NoError(err, "os.ReadFile could not read follow graph")
 	var v map[string]interface{}
 	err = json.Unmarshal(b, &v)
-	a.Empty(err, "reading follow-graph.json failed")
+	r.NoError(err, "reading follow-graph.json failed")
 	a.True(len(v) > 0, "follow graph does not contain content")
 
 	tests := []testcase{
@@ -52,17 +53,17 @@ func TestHops(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("hops %d", test.hops), func(t *testing.T) {
-			a := assert.New(t)
+			a, r := assert.New(t), require.New(t)
 			hopsMap, err := ProduceExpectations(Args{MaxHops: test.hops}, "follow-graph.json")
-			a.Empty(err, "ProduceExpectations had an error")
+			r.NoError(err, "ProduceExpectations had an error")
 
 			expectedFeeds, ok := hopsMap[test.origin]
-			a.True(ok, fmt.Sprintf("%s not in follow graph", test.origin))
+			a.True(ok, "%s not in follow graph", test.origin)
 			results := transformResult(expectedFeeds)
 
-			a.EqualValues(len(test.output), len(results), fmt.Sprintf("expectations for hops %d did not match asserted output", test.hops))
+			a.Len(test.output, len(results), "expectations for hops %d did not match asserted output", test.hops)
 			for _, id := range test.output {
-				a.True(results[id], fmt.Sprintf("results lacked %s", id))
+				a.True(results[id], "results lacked %s", id)
 			}
 		})
 	}
