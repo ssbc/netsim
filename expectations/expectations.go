@@ -33,6 +33,7 @@ func populateHopsAt(args Args, count int, peers map[string]peer) {
 	for _, my := range peers {
 		for _, friendId := range my.hops[count-1] {
 			friend := peers[friendId]
+			// jump to next iteration if this friend doesn't have any hops in the range, count-1, we are interested in atm
 			if len(friend.hops) == 0 || len(friend.hops) < count-1 {
 				continue
 			}
@@ -47,16 +48,18 @@ func populateHopsAt(args Args, count int, peers map[string]peer) {
 	}
 }
 
-// TODO: should we include hops[0]? i.e. the peer we are inspecting
-
 // collapses the crawled follow structure of all known peers into a single map of id -> ids expected to be replicated
 func collapse(args Args, peers map[string]peer, blocked map[string]map[string]bool) map[string][]string {
 	// prune out duplicates when collapsing the map
 	collapsedHops := make(map[string]map[string]bool)
 	for id, p := range peers {
+		collapsedHops[id] = make(map[string]bool)
 		for i := 0; i <= args.MaxHops; i++ {
-			collapsedHops[id] = make(map[string]bool)
 			for _, otherId := range p.hops[i] {
+				// omit hops[0], i.e. the peer we are inspecting
+				if id == otherId {
+					continue
+				}
 				collapsedHops[id][otherId] = true
 			}
 		}
@@ -115,8 +118,7 @@ func ProduceExpectations(args Args, graphpath string) (map[string][]string, erro
 				// non-nil relations are followed if status is true
 				if followed {
 					p.hops[1] = append(p.hops[1], relationId)
-					// and blocked if false
-				} else {
+				} else { // and blocked if false
 					p.blocked[relationId] = true
 					blocked[id][relationId] = true
 				}
