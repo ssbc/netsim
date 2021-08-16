@@ -14,11 +14,10 @@ import (
 )
 
 type Args struct {
-	SSBServer        string
-	FixturesRoot     string
-	ExpectationsPath string
-	FocusedCount     int
-	MaxHops          int
+	SSBServer    string
+	FixturesRoot string
+	FocusedCount int
+	MaxHops      int
 }
 
 type Generator struct {
@@ -300,14 +299,18 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 		return []Pair{}
 	}
 	var pairs []Pair
+	// from the pov of `id`: discover all new, direct follows `otherId`
 	for _, otherId := range g.FollowMap[id] {
+		// other was already known, continue search for the new in next iteration
 		if g.Seen[otherId] {
 			continue
 		}
+		// print out the newly discovered node and where it is in the hops graph
 		if verbose {
+			// a direct hop from our initial starting point
 			if hopsLeft == g.Gen.Args.MaxHops {
 				fmt.Fprintf(g.Gen.Output, "%d %s\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId])
-			} else {
+			} else { // an indirect hop, make a note of which node followed the other
 				fmt.Fprintf(g.Gen.Output, "%d %s (via %s)\n", g.Gen.Args.MaxHops-hopsLeft+1, g.Gen.IDsToNames[otherId], g.Gen.IDsToNames[id])
 			}
 		}
