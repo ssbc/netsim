@@ -18,6 +18,7 @@ type Args struct {
 	FixturesRoot string
 	FocusedCount int
 	MaxHops      int
+	Seed         int64
 }
 
 type Generator struct {
@@ -146,6 +147,7 @@ func GenerateTest(args Args, expectations map[string][]string, outputWriter io.W
 	followMap, g.isBlocking, err = GetFollowMap(path.Join(args.FixturesRoot, "follow-graph.json"))
 	check(err)
 
+	// read the puppet name -> id mapping contained in secret-ids.json
 	g.IDsToNames, err = GetIdentities(args.FixturesRoot)
 	check(err)
 
@@ -164,6 +166,9 @@ func GenerateTest(args Args, expectations map[string][]string, outputWriter io.W
 	}
 	// deterministically shuffle the focus group
 	// TODO: accept --seed flag to change shuffling
+	if g.Args.Seed > 0 {
+		rand.Seed(g.Args.Seed)
+	}
 	rand.Shuffle(len(g.FocusGroup), func(i, j int) {
 		g.FocusGroup[i], g.FocusGroup[j] = g.FocusGroup[j], g.FocusGroup[i]
 	})
@@ -205,6 +210,11 @@ func GenerateTest(args Args, expectations map[string][]string, outputWriter io.W
 	g.start(g.FocusGroup)
 
 	// go through each hops pair and connect them, starting with the pairs the furthest away from the focus peers
+	for _, pair := range hopsPairs {
+		g.batchConnect(pair)
+	}
+	// issue another round of connections to be sure we have flooded the network & receive all data from the hops
+	// (short-circuits a scheduling problem by paying with more execution time)
 	for _, pair := range hopsPairs {
 		g.batchConnect(pair)
 	}
@@ -320,7 +330,7 @@ func (g Graph) RecurseFollows(id string, hopsLeft int, verbose bool) []Pair {
 		if g.Seen[otherId] {
 			continue
 		}
-		pairs = append(pairs, g.RecurseFollows(otherId, hopsLeft-1, false)...)
+		pairs = append(pairs, g.RecurseFollows(otherId, hopsLeft-1, verbose)...)
 	}
 	return pairs
 }
