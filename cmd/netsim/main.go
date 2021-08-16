@@ -39,11 +39,13 @@ func main() {
 		var ssbServer string
 		var focusedPuppets int
 		var onlySplice bool
+		var generationSeed int64
 		flag.BoolVar(&onlySplice, "no-test-script", false, "only converts the input fixtures to netsim-style fixtures")
 		flag.BoolVar(&replicateBlocked, "replicate-blocked", false, "if flag is present, blocked peers will be replicated")
 		flag.StringVar(&outpath, "out", "./", "the output path of the generated netsim test & its auxiliary files")
 		flag.StringVar(&ssbServer, "sbot", "ssb-server", "the ssb server to start puppets with")
 		flag.IntVar(&focusedPuppets, "focused", 2, "number of puppets that verify they are fully replicating their hops")
+		flag.Int64Var(&generationSeed, "seed", 0, "seed used by test generation")
 		flag.Parse()
 
 		if len(flag.Args()) == 0 {
@@ -62,7 +64,7 @@ func main() {
 		// use the spliced logs to generate expectations
 		expectations := generateExpectations(fixturesOutput, hops, replicateBlocked)
 		// use the generated expectations & generate the test
-		generatedTest := generateTest(fixturesOutput, ssbServer, focusedPuppets, hops, expectations)
+		generatedTest := generateTest(fixturesOutput, ssbServer, focusedPuppets, hops, generationSeed, expectations)
 		// echo
 		fmt.Println(generatedTest)
 		// save test file to disk
@@ -119,11 +121,12 @@ func printHelp(cmd, usage, description string) {
 	os.Exit(1)
 }
 
-func generateTest(fixturesRoot, sbot string, focused, hops int, expectations map[string][]string) string {
+func generateTest(fixturesRoot, sbot string, focused, hops int, seed int64, expectations map[string][]string) string {
 	var generationArgs generation.Args
 	generationArgs.FixturesRoot = fixturesRoot
 	generationArgs.SSBServer = sbot
 	generationArgs.MaxHops = hops
+	generationArgs.Seed = seed
 	generationArgs.FocusedCount = focused
 
 	s := new(strings.Builder)
