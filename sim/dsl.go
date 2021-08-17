@@ -268,6 +268,7 @@ type Sleeper struct {
 type Timer struct {
 	start   time.Time
 	elapsed time.Duration
+	running bool
 }
 
 func (s *Sleeper) sleep(d time.Duration) {
@@ -449,20 +450,26 @@ func (s Simulator) execute() {
 			taplog(msg)
 		case "timerstart":
 			label := s.getInstructionArg(1)
-			s.timers[label] = &Timer{start: time.Now()}
+			s.timers[label] = &Timer{start: time.Now(), running: true}
 			taplog(fmt.Sprintf("timer %s started", label))
 			instr.TestSuccess()
 		case "timerstop":
 			label := s.getInstructionArg(1)
 			timer, ok := s.timers[label]
-			if ok {
-				duration := time.Since(timer.start)
-				timer.elapsed += duration
-				instr.TestSuccess()
-				taplog(fmt.Sprintf("timer %s stopped, current time: %s", label, timer.elapsed))
-			} else {
+
+			if !ok {
 				instr.TestFailure(fmt.Errorf("timer %s did not exist", label))
+				continue
 			}
+			if !timer.running {
+				instr.TestFailure(fmt.Errorf("timer %s existed, but was not currently started", label))
+				continue
+			}
+
+			timer.elapsed += time.Since(timer.start)
+			timer.running = false
+			instr.TestSuccess()
+			taplog(fmt.Sprintf("timer %s stopped, current time: %s", label, timer.elapsed.Truncate(time.Millisecond)))
 		case "wait":
 			arg := s.getInstructionArg(1)
 			ms, err := time.ParseDuration(fmt.Sprintf("%sms", arg))
