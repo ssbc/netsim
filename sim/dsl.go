@@ -365,8 +365,8 @@ func (s Simulator) execute() {
 			langImpl := s.getInstructionArg(2)
 			if _, ok := s.implementations[langImpl]; !ok {
 				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
-				instr.TestFailure(err)
-				continue
+				s.Abort(err)
+				return
 			}
 			p := s.getPuppet(name)
 			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
