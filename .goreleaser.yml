@@ -1,0 +1,25 @@
+builds:
+  - main: ./cmd/netsim
+    binary: netsim
+    goos:
+      - linux
+      - windows
+      - darwin
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+        - README.md
+        - tutorial.md
+        - commands.md
+        - sim-shims/
+        # - LICENSE.txt
+        # - ssb-fixtures/
