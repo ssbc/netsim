@@ -73,6 +73,7 @@ type Simulator struct {
 	hops            int
 	verbose         bool
 	fixtures        string
+	timers          map[string]*Timer
 
 	rootCtx         context.Context
 	cancelExecution context.CancelFunc
@@ -130,6 +131,7 @@ func makeSimulator(args Args, sbots []string) Simulator {
 	}
 
 	sim := Simulator{
+		timers:          make(map[string]*Timer),
 		puppetMap:       puppetMap,
 		puppetDir:       absPuppetDir,
 		fixturesIds:     fixturesIdsMap,
@@ -261,6 +263,11 @@ func (s *Simulator) acquirePort() int {
 type Sleeper struct {
 	elapsed time.Time
 	sim     Simulator
+}
+
+type Timer struct {
+	start   time.Time
+	elapsed time.Duration
 }
 
 func (s *Sleeper) sleep(d time.Duration) {
@@ -440,6 +447,22 @@ func (s Simulator) execute() {
 			msg, err := DoLog(srcPuppet, amount)
 			s.evaluateRun(err)
 			taplog(msg)
+		case "timerstart":
+			label := s.getInstructionArg(1)
+			s.timers[label] = &Timer{start: time.Now()}
+			taplog(fmt.Sprintf("timer %s started", label))
+			instr.TestSuccess()
+		case "timerstop":
+			label := s.getInstructionArg(1)
+			timer, ok := s.timers[label]
+			if ok {
+				duration := time.Since(timer.start)
+				timer.elapsed += duration
+				instr.TestSuccess()
+				taplog(fmt.Sprintf("timer %s stopped, current time: %s", label, timer.elapsed))
+			} else {
+				instr.TestFailure(fmt.Errorf("timer %s did not exist", label))
+			}
 		case "wait":
 			arg := s.getInstructionArg(1)
 			ms, err := time.ParseDuration(fmt.Sprintf("%sms", arg))
