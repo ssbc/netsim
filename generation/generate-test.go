@@ -213,8 +213,21 @@ func GenerateTest(args Args, expectations map[string][]string, outputWriter io.W
 	for _, pair := range hopsPairs {
 		g.batchConnect(pair)
 	}
-	// issue another round of connections to be sure we have flooded the network & receive all data from the hops
-	// (short-circuits a scheduling problem by paying with more execution time)
+	// issue another round of connections to be sure we have flooded the network & receive all data from the hops.
+	// short-circuits a scheduling problem by paying with more execution time.
+	//
+	// the problem:
+	// we order the connection statements so that the outermost hops are connected to their followers, and so on until
+	// the focused peers connect to their direct follows. the purpose is to trickle down data along the follows & hops and
+	// into the focused peers, whose local db we inspect using expectations & `has` statements.
+	//
+	// in some cases, however, the focused peers will not get an indirect follow's data due to the order connection
+	// statements can happen. to solve this, we perform two rounds and are ensured that all data should flow along the
+	// hops correctly.
+	//
+	// the primary reason this happens is because in netsim's spliced out fixtures, each peer initially only holds their
+	// own data. when they connect with others, the connecting peer gets the data the other has as well (the peer's own
+	// messages, and messages from their previously-connected-with follows)
 	for _, pair := range hopsPairs {
 		g.batchConnect(pair)
 	}
