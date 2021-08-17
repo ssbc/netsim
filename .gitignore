@@ -4,3 +4,5 @@
 *.json
 *.tar.gz
 fixtures-output
+
+dist/

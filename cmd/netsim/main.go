@@ -17,6 +17,8 @@ func usageExit() {
 	os.Exit(1)
 }
 
+var version = "devbuild"
+
 func main() {
 	if len(os.Args) < 2 {
 		usageExit()
@@ -28,8 +30,10 @@ func main() {
 	var fixturesDir string
 	var testfile string
 	var hops int
+	var versionFlag bool
 	flag.StringVar(&testfile, "spec", "netsim-test.txt", "path to netsim test file")
 	flag.IntVar(&hops, "hops", 2, "hops controls the distance from a peer that information should still be retrieved")
+	flag.BoolVar(&versionFlag, "version", false, "output the version of netsim")
 
 	// handle each command, optionally defining command-specific flags, and finally invoking the command
 	switch cmd {
@@ -47,6 +51,8 @@ func main() {
 		flag.IntVar(&focusedPuppets, "focused", 2, "number of puppets that verify they are fully replicating their hops")
 		flag.Int64Var(&generationSeed, "seed", 0, "seed used by test generation")
 		flag.Parse()
+
+		checkVersionFlag(versionFlag)
 
 		if len(flag.Args()) == 0 {
 			printHelp("generate",
@@ -80,6 +86,8 @@ func main() {
 		flag.IntVar(&simArgs.BasePort, "port", 18888, "start of port range used for each running sbot")
 		flag.BoolVar(&simArgs.Verbose, "v", false, "increase logging verbosity")
 		flag.Parse()
+
+		checkVersionFlag(versionFlag)
 
 		simArgs.Hops = hops
 		simArgs.Testfile = testfile
@@ -149,4 +157,11 @@ func prepareCommand() string {
 	args = append(args, os.Args[2:]...)
 	os.Args = args
 	return cmd
+}
+
+func checkVersionFlag(showVersion bool) {
+	if showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 }
