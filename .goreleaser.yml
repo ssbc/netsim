@@ -3,19 +3,15 @@ builds:
     binary: netsim
     goos:
       - linux
-      - windows
+      # - windows # we use a .sh as an essential component; so windows will only work under WSL
       - darwin
 archives:
   - replacements:
       darwin: Darwin
       linux: Linux
-      windows: Windows
       386: i386
       amd64: x86_64
     wrap_in_directory: true
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
         - README.md
         - tutorial.md
