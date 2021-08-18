@@ -266,6 +266,7 @@ type Sleeper struct {
 }
 
 type Timer struct {
+	order   int // keeps track of the order timers were started in, for later logging
 	start   time.Time
 	elapsed time.Duration
 	running bool
@@ -450,7 +451,14 @@ func (s Simulator) execute() {
 			taplog(msg)
 		case "timerstart":
 			label := s.getInstructionArg(1)
-			s.timers[label] = &Timer{start: time.Now(), running: true}
+			var timer *Timer
+			if t, ok := s.timers[label]; ok {
+				t.start, t.running = time.Now(), true
+				timer = t
+			} else { // first time we're creating this timer
+				timer = &Timer{order: len(s.timers), start: time.Now(), running: true}
+			}
+			s.timers[label] = timer
 			taplog(fmt.Sprintf("timer %s started", label))
 			instr.TestSuccess()
 		case "timerstop":
@@ -651,7 +659,10 @@ func (s Simulator) logMetrics() {
 		for label := range s.timers {
 			labels = append(labels, label)
 		}
-		sort.Strings(labels)
+		// sort timers by their initiation order (and not alphabetical)
+		sort.Slice(labels, func(i, j int) bool {
+			return s.timers[labels[i]].order < s.timers[labels[j]].order
+		})
 		for _, label := range labels {
 			timer := s.timers[label]
 			taplog(fmt.Sprintf(fmtString, label, timer.elapsed.Truncate(time.Millisecond)))
