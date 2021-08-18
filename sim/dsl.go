@@ -642,6 +642,21 @@ func (s Simulator) logMetrics() {
 		count := strconv.Itoa(puppet.totalMessages)
 		taplog(fmt.Sprintf(fmtString, puppet.name, total, active, count))
 	}
+	// print timers if applicable
+	if len(s.timers) > 0 {
+		taplog("\nStarted timers & final elapsed time")
+		fmtString = "%-12s %12s"
+		taplog(fmt.Sprintf(fmtString, "Label", "Time"))
+		var labels []string
+		for label := range s.timers {
+			labels = append(labels, label)
+		}
+		sort.Strings(labels)
+		for _, label := range labels {
+			timer := s.timers[label]
+			taplog(fmt.Sprintf(fmtString, label, timer.elapsed.Truncate(time.Millisecond)))
+		}
+	}
 }
 
 func (s Simulator) exit() {
