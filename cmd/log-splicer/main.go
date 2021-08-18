@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
 // SPDX-License-Identifier: MIT
 
 // Tasks the log splicer takes care of during its runtime:

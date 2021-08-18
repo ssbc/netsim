@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
+// SPDX-License-Identifier: LGPL-3.0
+
 package sim
 
 import (

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
+// SPDX-License-Identifier: LGPL-3.0
+
 // Prints out a follow graph, as seen from the point of view of the focused peers.
 // This command is literally a pared down version of generate-test.go
 package main

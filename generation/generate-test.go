@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
+// SPDX-License-Identifier: LGPL-3.0
+
 // Generates a full netsim test, given a log-splicer processed ssb-fixtures folder and a replication expectations file
 // expectations.json.
 package generation

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
 // SPDX-License-Identifier: MIT
 
 // Package keys could be it's own thing between go-ssb and this but not today
