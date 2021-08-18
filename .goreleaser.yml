@@ -16,6 +16,5 @@ archives:
         - README.md
         - tutorial.md
         - commands.md
-        - sim-shims/
         # - LICENSE.txt
         # - ssb-fixtures/
