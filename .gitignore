@@ -4,5 +4,7 @@
 *.json
 *.tar.gz
 fixtures-output
+care-package
+puppets/
 
 dist/
