@@ -38,5 +38,10 @@ echo "using caps ${CAPS} and hops ${HOPS}"
 echo "puppet lives in ${DIR}"
 export LIBRARIAN_WRITEALL=0 
 # note: exec is important. otherwise the process won't be killed when the netsim has finished running :)
-exec ${SCRIPTPATH}/go-sbot -lis :"$PORT" -wslis :"$(($PORT+1))" -repo "$DIR" -shscap "${CAPS}" -hops "${HOPS}"
-
+exec ${SCRIPTPATH}/go-sbot \
+  -lis :"$PORT" \
+  -wslis "" \
+  -debuglis ":$(($PORT+1))" \
+  -repo "$DIR" \
+  -shscap "${CAPS}" \
+  -hops "$(( ${HOPS} - 1 ))"

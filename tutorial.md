@@ -8,7 +8,7 @@ A netsim tutorial that shows how you can generate your own
 npx ssb-fixtures --authors=20 --messages=9000 --allkeys --followGraph --outputDir=ssb-fixtures-output
 
 # convert the ssb-fixtures to the format netsim uses, and generate an automatic test for netsim
-netsim generate --out fixtures-output ssb-fixtures-output
+netsim generate --out . ssb-fixtures-output # creates test netsim-test.txt, and folder fixtures-output
 
 # run the generated test with the adapted fixtures, using the ssb implementation in ssb-server
 netsim run --spec netsim-test.txt --fixtures fixtures-output ~/code/ssb-server
