@@ -1,12 +1,12 @@
 # Caveats
+Unexpected situations you may run into when testing across scuttlebutt implementations, and
+some suggested ways forward for getting around them.
 
 ## `go-ssb`
 ### Hops in Go equals hops in Nodejs + 1 
 As of writing, [go-ssb](https://github.com/cryptoscope/ssb) currently has a different
-interpretation of SSB's `hops` parameter, which decides how many layers removed from yourself
-and your direct follows you want to replicate.
-
-
+interpretation of SSB's hops concept, or how many layers from yourself you want to
+download messages.
 
 <table>
 <tr>
@@ -15,7 +15,7 @@ and your direct follows you want to replicate.
 <th>Hops (nodejs)</th>
 </tr>
 <tr>
-<th> Only yourself </th>
+<th>Only yourself</th>
 <td>—</td>
 <td> 0 </td>
 </tr>
@@ -25,15 +25,16 @@ and your direct follows you want to replicate.
 <td>1</td>
 </tr>
 <tr>
-<th>Include follower's follows</th>
+<th>Include transitive follows, one step away</th>
 <td>1</td>
 <td>2</td>
 </tr>
+<th>Include transitive follows, two steps away</th>
+<td>2</td>
+<td>3</td>
+</tr>
 </table>
 
-In nodejs the hops are interpreted as:
-
-* hops 0: just you
 ### Following in go-ssb takes three seconds to take effect (wrt connections)
 Given a netsim puppet `peer` running [go-ssb](https://github.com/cryptoscope/ssb) and the following netsim snippet:
 
@@ -53,5 +54,41 @@ code](https://github.com/cryptoscope/ssb/blob/80b8875e81408101f83c24eb83ec620037
 follow puppet alice
 wait 4000
 connect puppet alice
+```
+
+### `nope - access denied` when connecting to peer 
+Given two puppets `alice` and `gopher`, where `alice` does not follow `gopher`, the latter is running [go-ssb](https://github.com/cryptoscope/ssb), and the following statement:
+
+```
+connect alice gopher
+# or, equivalent
+connect gopher alice
+```
+
+Depending on how you are starting your go-sbot, you might get a failure and an error log (when
+running in `-v`erbose mode):
+```
+node - access denied
+```
+
+The reason is that the go server is strict with who it allows to establish connections with it.
+If the peer running the go server does not follow the connecting party, then the connection
+will be denied.
+
+**Mitigations:**
+
+1. Make sure `alice` follows `gopher` (and observe the 3 second caveat mentioned elsewhere
+in this document)
+2. Run go-ssb in so-called `promiscuous` mode by appending a `-promisc` flag when starting it:
+
+```diff
+exec go-sbot \
+  -lis :"$PORT" \
+  -wslis "" \
+  -debuglis ":$(($PORT+1))" \
+  -repo "$DIR" \
+  -shscap "${CAPS}" \
+  -hops "$(( ${HOPS} - 1 ))"
++  -promisc
 ```
 
