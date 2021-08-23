@@ -1,6 +1,39 @@
 # Caveats
 
 ## `go-ssb`
+### Hops in Go equals hops in Nodejs + 1 
+As of writing, [go-ssb](https://github.com/cryptoscope/ssb) currently has a different
+interpretation of SSB's `hops` parameter, which decides how many layers removed from yourself
+and your direct follows you want to replicate.
+
+
+
+<table>
+<tr>
+<th>Interpretation</th>
+<th>Hops (Go)</th>
+<th>Hops (nodejs)</th>
+</tr>
+<tr>
+<th> Only yourself </th>
+<td>—</td>
+<td> 0 </td>
+</tr>
+<tr>
+<th>Include direct follows</th>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>Include follower's follows</th>
+<td>1</td>
+<td>2</td>
+</tr>
+</table>
+
+In nodejs the hops are interpreted as:
+
+* hops 0: just you
 ### Following in go-ssb takes three seconds to take effect (wrt connections)
 Given a netsim puppet `peer` running [go-ssb](https://github.com/cryptoscope/ssb) and the following netsim snippet:
 
