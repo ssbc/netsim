@@ -25,7 +25,7 @@ connecting and disconnecting specific peers, asserting the latest known sequence
 peer from another, etc.
 
 These statements will be composed of behind-the-scenes muxrpc calls (as well as specifics for
-starting a particular ssb peer; see the [previous netsim writeup](./initial-design-doc.md) for
+starting a particular ssb peer; see the [previous netsim writeup](./docs/initial-design-doc.md) for
 thoughts on the specifics), with a goal to use the smallest set of muxrpc calls that lets us
 implement the most useful testing functionality.
 

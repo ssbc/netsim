@@ -1,5 +1,5 @@
 # Network Simulator Test Commands
-As described in the [initial syntax proposal](./domain-specific-language.md), the network
+As described in the [initial syntax proposal](/docs/domain-specific-language.md), the network
 simulator works by executing a test specification file. The current set of implemented commands
 can be read below.
 
