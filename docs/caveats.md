@@ -35,6 +35,23 @@ download messages.
 </tr>
 </table>
 
+**Mitigation:**
+
+Set go-ssb's hops parameter to be one less than is defined on the `${HOPS}` env var ingested by
+`sim-shim.sh`:
+
+```diff
+go-sbot \
+  -lis :"$PORT" \
+  -wslis "" \
+  -debuglis ":$(($PORT+1))" \
+  -repo "$DIR" \
+  -shscap "${CAPS}" \
++ -hops "$(( ${HOPS} - 1 ))"
+``` 
+
+**Note**: This mitigation is already implemented in the [default go-ssb sim-shim](https://github.com/ssb-ngi-pointer/netsim/blob/main/sim-shims/go-sim-shim.sh#L41-L47).
+
 ### Following in go-ssb takes three seconds to take effect (wrt connections)
 Given a netsim puppet `peer` running [go-ssb](https://github.com/cryptoscope/ssb) and the following netsim snippet:
 
@@ -77,8 +94,7 @@ will be denied.
 
 **Mitigations:**
 
-1. Make sure `alice` follows `gopher` (and observe the 3 second caveat mentioned elsewhere
-in this document)
+1. Make sure `alice` follows `gopher`, `gopher` follows `alice` (and observe the 3 second caveat mentioned elsewhere in this document)
 2. Run go-ssb in so-called `promiscuous` mode by appending a `-promisc` flag when starting it:
 
 ```diff
