@@ -51,11 +51,12 @@ netsim run -h
 ``` 
 
 For more on authoring netsim commands: 
-* [`commands.md`](./commands.md) 
+* [`commands.md`](./docs/commands.md) 
 * [`ssb-netsim`](https://github.com/ssb-ngi-pointer/ssb-netsim), the nodejs helper library 
+* [caveats & edgecases](./docs/caveats.md) learn about gotchas surrounding testing of specific ssb implementations
 
-There's also a [tutorial](./tutorial.md) that demonstrates fixture generation. Finally, you can
-always peek at the [original design doc](./initial-design-doc.md) if you are curious to see how
+There's also a [tutorial](./docs/tutorial.md) that demonstrates fixture generation. Finally, you can
+always peek at the [original design doc](./docs/initial-design-doc.md) if you are curious to see how
 things began.
 
 ## Example
