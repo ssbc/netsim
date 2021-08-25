@@ -64,7 +64,7 @@ Say we want to test an sbot implementation in `~/code/ssb-server`, just to make 
 are still working.
 
 First, we write a netsim test called `basic-test.txt`:
-```
+```m68k
 # booting
 enter peer
 hops peer 1
