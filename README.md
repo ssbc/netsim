@@ -137,13 +137,12 @@ Currently, the following calls are required to be implemented before an ssb impl
 testable in netsim:
 
 **Essential**
+* `createLogStream` 
 * `createHistoryStream`
 * `whoami`
 * `publish`
-* `replicate.upto`
 * `conn.connect`
 * `conn.disconnect`
 
 **Extras**
-* `createLogStream` used by the `log` command
 * `friends.isFollowing` used by `isfollowing` / `isnotfollowing`
