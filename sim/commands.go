@@ -259,7 +259,7 @@ func DoWhoami(p *Puppet) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return parsed.ID.Ref(), nil
+	return parsed.ID.String(), nil
 }
 
 func DoLog(p *Puppet, n int) (string, error) {
@@ -355,7 +355,7 @@ func queryIsFollowing(srcPuppet, dstPuppet *Puppet) (bool, error) {
 	arg := struct {
 		Source *refs.FeedRef `json:"source"`
 		Dest   *refs.FeedRef `json:"dest"`
-	}{Source: srcRef, Dest: dstRef}
+	}{Source: &srcRef, Dest: &dstRef}
 
 	var response interface{}
 	err = asyncRequest(srcPuppet, muxrpc.Method{"friends", "isFollowing"}, arg, &response)

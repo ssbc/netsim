@@ -277,12 +277,13 @@ func SpliceLogs(args Args) error {
 
 		msg := v.(lfoMessage)
 		// siphon out the author
-		a, has := feeds[msg.author.Ref()]
+		authorRef := msg.author.String()
+		a, has := feeds[authorRef]
 		if !has {
 			continue
 		}
 		a.latest += 1
-		feeds[msg.author.Ref()] = a
+		feeds[authorRef] = a
 
 		_, err = a.log.Append(v)
 		if err != nil {
