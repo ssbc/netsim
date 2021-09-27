@@ -10,6 +10,6 @@ require (
 	go.cryptoscope.co/netwrap v0.1.0
 	go.cryptoscope.co/nocomment v0.0.0-20210520094614-fb744e81f810
 	go.cryptoscope.co/secretstream v1.2.9
-	go.mindeco.de/ssb-refs v0.2.0
+	go.mindeco.de/ssb-refs v0.4.2-0.20210908123826-f7ca13c14896
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
