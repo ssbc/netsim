@@ -27,6 +27,7 @@ type Puppet struct {
 	hops          int
 	seqno         int
 	totalMessages int
+	totalFeeds    int
 	totalTime     time.Duration
 	slept         time.Duration
 	lastStart     time.Time
@@ -56,6 +57,7 @@ func (p *Puppet) countMessages() error {
 		count += seqno.Sequence
 	}
 	p.totalMessages = count
+	p.totalFeeds = len(seqnos)
 	return nil
 }
 
