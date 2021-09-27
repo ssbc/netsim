@@ -431,7 +431,11 @@ func (s Simulator) execute() {
 				continue
 			}
 			instr.TestSuccess()
-			taplog(fmt.Sprintf("%s (%d messages) has id %s ", name, p.totalMessages, p.feedID))
+			feedStr := "feeds"
+			if p.totalFeeds == 1 {
+				feedStr = "feed"
+			}
+			taplog(fmt.Sprintf("%s (%d messages, %d %s) has id %s ", name, p.totalMessages, p.totalFeeds, feedStr, p.feedID))
 			taplog(fmt.Sprintf("logging to %s.txt", name))
 		case "stop":
 			name := s.getInstructionArg(1)
@@ -628,8 +632,8 @@ func (s Simulator) monitorInterrupts() {
 }
 
 func (s Simulator) logMetrics() {
-	fmtString := "%-12s %12s %12s %12s"
-	taplog(fmt.Sprintf(fmtString, "Puppet", "Total time", "Active time", "# messages"))
+	fmtString := "%-12s %12s %12s %12s %8s"
+	taplog(fmt.Sprintf(fmtString, "Puppet", "Total time", "Active time", "# messages", "# feeds"))
 	puppets := make([]*Puppet, 0, len(s.puppetMap))
 	// put all puppets into a slice so for later sortability, and stop the timers of running puppets
 	for _, puppet := range s.puppetMap {
@@ -651,8 +655,9 @@ func (s Simulator) logMetrics() {
 	for _, puppet := range puppets {
 		total := puppet.totalTime.Truncate(time.Millisecond)
 		active := (puppet.totalTime - puppet.slept).Truncate(time.Millisecond)
-		count := strconv.Itoa(puppet.totalMessages)
-		taplog(fmt.Sprintf(fmtString, puppet.name, total, active, count))
+		msgcount := strconv.Itoa(puppet.totalMessages)
+		feedcount := strconv.Itoa(puppet.totalFeeds)
+		taplog(fmt.Sprintf(fmtString, puppet.name, total, active, msgcount, feedcount))
 	}
 	// print timers if applicable
 	if len(s.timers) > 0 {
