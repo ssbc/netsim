@@ -76,31 +76,75 @@ func DoDisconnect(src, dst *Puppet) error {
 }
 
 func queryLatest(p *Puppet) ([]Latest, error) {
-	var empty interface{}
-	c, src, err := sourceRequest(p, muxrpc.Method{"replicate", "upto"}, empty)
+	// this is currently way less efficient than using `replicate.upto`. replicate.upto however doesn't work in a ssb-db2
+	// context, and nobody seems to want to patch that into ssb-db2 as a compat muxrpc so here we go
+
+	// gather all log stream responses we can find in a map of pubkey->largest seqno
+	seqnos := make(map[string]Latest)
+
+	type logStreamResponse struct {
+		Value struct {
+			Author    string
+			Sequence  int `json:"sequence"`
+			Timestamp int `json:"timestamp"`
+		} `json:"value"`
+	}
+
+	type sourceOptions struct {
+		Reverse bool `json:"reverse"`
+		Keys    bool `json:"keys"`
+	}
+
+	// explicitly set the Keys property to make the go & js stacks return the data in the same format
+	opts := sourceOptions{Reverse: true, Keys: true}
+	c, src, err := sourceRequest(p, muxrpc.Method{"createLogStream"}, opts)
 	if err != nil {
-		return nil, err
+		return []Latest{}, err
 	}
 	defer c.Terminate()
 
-	var seqnos []Latest
 	ctx := context.TODO()
-	for src.Next(ctx) {
-		var l Latest
-		err = src.Reader(func(rd io.Reader) error {
-			return json.NewDecoder(rd).Decode(&l)
-		})
+
+	parseLogStream := func(rd io.Reader) error {
+		// read all the json-encoded data as bytes
+		b, err := io.ReadAll(rd)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		seqnos = append(seqnos, l)
+
+		// TODO (2021-09-17): is there some way we can terminate the loop calling parseLogStream? since we're streaming
+		// records in reverse, it is likely that we will encounter all the latest sequences that a particular puppet has in
+		// their database way earlier than when all messages are exhausted. terminating earlier would mean less time spent
+		// in this routine for very large (100k+) databases, since json.Unmarshal is so time-consuming
+
+		// decode the response bits we care about
+		var resp logStreamResponse
+		err = json.Unmarshal(b, &resp)
+		if err != nil {
+			return err
+		}
+
+		// only update the map if the encountered sequence number is larger than what we already have stored
+		current, exist := seqnos[resp.Value.Author]
+		if !exist || resp.Value.Sequence > current.Sequence {
+			seqnos[resp.Value.Author] = Latest{ID: resp.Value.Author, Sequence: resp.Value.Sequence, TS: resp.Value.Timestamp}
+		}
+		return nil
 	}
 
-	if err := src.Err(); err != nil {
-		return nil, err
+	for src.Next(ctx) {
+		err = src.Reader(parseLogStream)
+		if err != nil {
+			return []Latest{}, err
+		}
 	}
 
-	return seqnos, nil
+	// convert map into slice of []Latest (mostly cause atm i don't want to rewrite the places that use slice []Latest)
+	var latest []Latest
+	for _, l := range seqnos {
+		latest = append(latest, l)
+	}
+	return latest, nil
 }
 
 func extractSeqno(dst *Puppet, seqno string) (int, string, error) {
@@ -222,10 +266,11 @@ func DoLog(p *Puppet, n int) (string, error) {
 	type sourceOptions struct {
 		Limit   int  `json:"limit"`
 		Reverse bool `json:"reverse"`
+		Keys    bool `json:"keys"`
 	}
 
 	// only get the last n logs
-	opts := sourceOptions{Limit: n, Reverse: true}
+	opts := sourceOptions{Limit: n, Reverse: true, Keys: true}
 	c, src, err := sourceRequest(p, muxrpc.Method{"createLogStream"}, opts)
 	if err != nil {
 		return "", err
