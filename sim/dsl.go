@@ -396,7 +396,7 @@ func (s Simulator) execute() {
 				return
 			}
 			instr.TestSuccess()
-			taplog(fmt.Sprintf("removed %s", p.name, subfolder))
+			taplog(fmt.Sprintf("removed %s", subfolder))
 		case "start":
 			name := s.getInstructionArg(1)
 			langImpl := s.getInstructionArg(2)
