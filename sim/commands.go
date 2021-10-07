@@ -78,10 +78,6 @@ func DoDisconnect(src, dst *Puppet) error {
 func queryLatest(p *Puppet) ([]Latest, error) {
 	// this is currently way less efficient than using `replicate.upto`. replicate.upto however doesn't work in a ssb-db2
 	// context, and nobody seems to want to patch that into ssb-db2 as a compat muxrpc so here we go
-
-	// gather all log stream responses we can find in a map of pubkey->largest seqno
-	seqnos := make(map[string]Latest)
-
 	type logStreamResponse struct {
 		Value struct {
 			Author    string
@@ -104,7 +100,8 @@ func queryLatest(p *Puppet) ([]Latest, error) {
 	defer c.Terminate()
 
 	ctx := context.TODO()
-
+	// count all log stream responses in a map of pubkey->counter
+	counters := make(map[string]int)
 	parseLogStream := func(rd io.Reader) error {
 		// read all the json-encoded data as bytes
 		b, err := io.ReadAll(rd)
@@ -125,10 +122,11 @@ func queryLatest(p *Puppet) ([]Latest, error) {
 		}
 
 		// only update the map if the encountered sequence number is larger than what we already have stored
-		current, exist := seqnos[resp.Value.Author]
-		if !exist || resp.Value.Sequence > current.Sequence {
-			seqnos[resp.Value.Author] = Latest{ID: resp.Value.Author, Sequence: resp.Value.Sequence, TS: resp.Value.Timestamp}
+		_, exist := counters[resp.Value.Author]
+		if !exist {
+			counters[resp.Value.Author] = 0
 		}
+		counters[resp.Value.Author] += 1
 		return nil
 	}
 
@@ -139,11 +137,11 @@ func queryLatest(p *Puppet) ([]Latest, error) {
 		}
 	}
 
-	// convert map into slice of []Latest (mostly cause atm i don't want to rewrite the places that use slice []Latest)
 	var latest []Latest
-	for _, l := range seqnos {
-		latest = append(latest, l)
+	for author, seqno := range counters {
+		latest = append(latest, Latest{ID: author, Sequence: seqno, TS: 0})
 	}
+
 	return latest, nil
 }
 
