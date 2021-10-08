@@ -14,7 +14,7 @@ archives:
     wrap_in_directory: true
     files:
         - README.md
-        - tutorial.md
-        - commands.md
+        - docs/tutorial.md
+        - docs/commands.md
         - LICENSE
         # - ssb-fixtures/
