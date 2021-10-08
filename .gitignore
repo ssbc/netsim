@@ -6,5 +6,16 @@
 fixtures-output
 care-package
 puppets/
+cmd/expectations/expectations
+cmd/generate-test/generate-test
+cmd/log-splicer/log-splicer
+cmd/print-follow-graph/print-follow-graph
+cmd/sim/sim
+cmd/netsim/debugging-glyph/
+cmd/netsim/netsim
+expectations/graphmap
+go-sim-shim.sh
+netsim-db2/
+
 
 dist/
