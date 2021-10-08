@@ -28,6 +28,7 @@ skipoffset <name>       // should be called before starting a peer to have any e
 alloffsets <name>       // should be called before starting a peer to have any effect (preloads the non-spliced input ssb-fixtures => puppet acts like a pub)
 load <name> @<base64>.ed25519               // loads an id & its associated secret + log.offset from fixtures
 start <name> <implementation-folder>        // spin up name as ssb peer using the specifed sbot implementation
+reset <name> <implementation-folder>        // resets a peer's execution folder -> they will have forgotten any messages they synced from others
 stop <name>                                 // stop a currently running peer
 log <name> <amount of messages from the end to debug print>
 wait <milliseconds>                         // pause script execution

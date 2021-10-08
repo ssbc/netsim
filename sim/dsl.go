@@ -366,6 +366,37 @@ func (s Simulator) execute() {
 			p := s.getPuppet(name)
 			p.caps = caps
 			instr.TestSuccess()
+		case "reset":
+			name := s.getInstructionArg(1)
+			langImpl := s.getInstructionArg(2)
+			if _, ok := s.implementations[langImpl]; !ok {
+				err := errors.New(fmt.Sprintf("no such language implementation passed to simulator on startup (%s)", langImpl))
+				s.Abort(err)
+				return
+			}
+			p := s.getPuppet(name)
+			// puppet directory was empty => it was never started
+			if p.directory == "" {
+				instr.TestSuccess()
+				taplog(fmt.Sprintf("there was no execution folder to reset for %s", p.name))
+				continue
+			}
+			subfolder := fmt.Sprintf("%s-%s", langImpl, name)
+			fullpath := filepath.Join(s.puppetDir, subfolder)
+
+			absdir, err := filepath.Abs(fullpath)
+			if err != nil {
+				s.Abort(fmt.Errorf("%s errored during reset (%w)", p.name, err))
+				return
+			}
+			// remove the created puppet dir, thus resetting its starting state
+			err = os.RemoveAll(absdir)
+			if err != nil {
+				s.Abort(fmt.Errorf("%s errored during reset (%w)", p.name, err))
+				return
+			}
+			instr.TestSuccess()
+			taplog(fmt.Sprintf("removed %s", subfolder))
 		case "start":
 			name := s.getInstructionArg(1)
 			langImpl := s.getInstructionArg(2)
