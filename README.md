@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Network Simulator 
 _a simulator for testing [secure scuttlebutt](https://ssb.nz) implementations against each other_
 

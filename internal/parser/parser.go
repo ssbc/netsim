@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2021 the netsim authors
 //
-// SPDX-License-Identifier: LGPL-3.0
+// SPDX-License-Identifier: LGPL-3.0-or-later
 
 // Package parser parses the lisp-like syntax for defining custom SSB messages, written in combination with the
 // `publish` command.

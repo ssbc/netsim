@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Caveats
 Unexpected situations you may run into when testing across scuttlebutt implementations, and
 some suggested ways forward for getting around them.

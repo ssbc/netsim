@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2021 the netsim authors
+#
+# SPDX-License-Identifier: MIT
+
 builds:
   - main: ./cmd/netsim
     binary: netsim

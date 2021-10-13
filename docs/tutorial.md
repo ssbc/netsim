@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Tutorial
 A netsim tutorial that shows how you can generate your own
 [`ssb-fixtures`](https://github.com/ssb-ngi-pointer/ssb-fixtures).

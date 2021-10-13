@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2021 the netsim authors
+//
+// SPDX-License-Identifier: MIT
+
 module github.com/ssb-ngi-pointer/netsim
 
 go 1.16

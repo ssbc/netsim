@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Network Simulator 
 _a brief exposition on the network simulator to be built as part of SSB's NGI Pointer grant_ 
 

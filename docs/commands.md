@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Network Simulator Test Commands
 As described in the [initial syntax proposal](/docs/domain-specific-language.md), the network
 simulator works by executing a test specification file. The current set of implemented commands

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021 the netsim authors
+
+SPDX-License-Identifier: CC0-1.0
+-->
+
 # Network Simulator Language
 _okay okay hear me out, it's not as nuts as it might seem_
 

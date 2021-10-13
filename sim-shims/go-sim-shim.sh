@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2021 the netsim authors
+#
+# SPDX-License-Identifier: MIT
+
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 DIR="$1"
 PORT="$2"
